@@ -40,6 +40,13 @@ colnames(tax_table(run)) <- c("Kingdom", "Phylum", "Class",
 ## Subsample-Only rain samples:
 run_rain <- subset_samples(run, Source%in%c("Rain"))
 summary(sample_data(run_rain)$Source)
+print(run_rain)
+###### phyloseq-class experiment-level object
+###### otu_table()   OTU Table:         [ 30889 taxa and 10 samples ]
+###### sample_data() Sample Data:       [ 10 samples by 11 sample variables ]
+###### tax_table()   Taxonomy Table:    [ 30889 taxa by 7 taxonomic ranks ]
+###### phy_tree()    Phylogenetic Tree: [ 30889 tips and 30750 internal nodes ]OTUs########
+sample_sums(run_rain)
 
 ########### Relative abundance of the Rain Microbiome
 
@@ -65,7 +72,7 @@ ggplot(run_phylum_rain,aes(x=Time,y=Abundance,fill=Phylum)) +
   guides(fill=guide_legend(reverse=T,keywidth = 1,keyheight = 1)) + 
   ylab("Relative Abundance (Phylum > 1%) \n") +
   xlab("Rain Colection") +
-  theme(axis.text.x=element_text(size=14,angle=90,hjust =1),
+  theme(axis.text.x=element_text(size=16,angle=0,hjust =0.5),
         axis.text.y = element_text(size = 14),
         strip.text.x = element_text(size=18,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=18, face = 'bold'),
@@ -102,7 +109,7 @@ ggplot(run_class_rain,aes(x=Time,y=Abundance,fill=Class)) +
   guides(fill=guide_legend(reverse=T,keywidth = 1,keyheight = 1)) + 
   ylab("Relative Abundance (Class > 1%) \n") +
   xlab("Rain Colection") +
-  theme(axis.text.x=element_text(size=14,angle=90,hjust =1),
+  theme(axis.text.x=element_text(size=16,angle=0,hjust =0.5),
         axis.text.y = element_text(size = 14),
         strip.text.x = element_text(size=18,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=18, face = 'bold'),
@@ -120,10 +127,10 @@ run_genus_rain <- run_rain %>%
   tax_glom(taxrank = "Genus") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
-  filter(Abundance > 0.02) %>%
+  filter(Abundance > 0.001) %>%
   arrange(Genus)
 
-write.csv(run_genus_rain, 'run_genus_rain_abun02.csv')
+write.csv(run_genus_rain, 'run_genus_rain_abun001.csv')
 
 library(RColorBrewer)
 n <- dim(run_genus_rain)[1]
@@ -136,20 +143,67 @@ ggplot(run_genus_rain,aes(x=Time,y=Abundance,fill=Genus)) +
   geom_bar(position="fill",stat="identity") + 
   scale_fill_manual(values = col_vector) + 
   guides(fill=guide_legend(reverse=T,keywidth = 1,keyheight = 1)) + 
-  ylab("Relative Abundance (Genus) > 1%) \n") +
+  ylab("Relative Abundance (Genus) > 2%) \n") +
   xlab("Rain Colection") +
-  theme(axis.text.x=element_text(size=14,angle=90,hjust =1),
+  theme(axis.text.x=element_text(size=14,angle=0,hjust =0.5),
         axis.text.y = element_text(size = 14),
         strip.text.x = element_text(size=18,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=18, face = 'bold'),
         plot.title = element_text(size = rel(2)),
         axis.title=element_text(size=18,face="bold", vjust = 10),
-        legend.text = element_text(size=10),
+        legend.text = element_text(size=11),
         plot.background = element_blank(),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()) +
   ggtitle("Genus Composition")+
   scale_y_continuous(labels=percent_format(),expand=c(0,0))
+
+################ Rarefaction Curves #########
+## Calculate rarefaction Curves
+calculate_rarefaction_curves <- function(psdata, measures, depths) {
+  require('plyr') # ldply
+  require('reshape2') # melt
+  estimate_rarified_richness <- function(psdata, measures, depth) {
+    if(max(sample_sums(psdata)) < depth) return()
+    psdata <- prune_samples(sample_sums(psdata) >= depth, psdata)
+    rarified_psdata <- rarefy_even_depth(psdata, depth, verbose = FALSE)
+    alpha_diversity <- estimate_richness(rarified_psdata, measures = measures) # as.matrix forces the use of melt.array, which includes the Sample names (rownames)
+    molten_alpha_diversity <- melt(as.matrix(alpha_diversity), varnames = c('Sample', 'Measure'), value.name = 'Alpha_diversity')
+    molten_alpha_diversity
+  }
+  names(depths) <- depths # this enables automatic addition of the Depth to the output by ldply
+  rarefaction_curve_data <- ldply(depths, estimate_rarified_richness, psdata = psdata, measures = measures, .id = 'Depth', .progress = ifelse(interactive(), 'text', 'none')) # convert Depth from factor to numeric
+  rarefaction_curve_data$Depth <- as.numeric(levels(rarefaction_curve_data$Depth))[rarefaction_curve_data$Depth]
+  rarefaction_curve_data
+}
+
+## Sequencing depth - Rarefaction curves plots
+depth = 100000
+step = 1000
+rarefaction_curve_data <- calculate_rarefaction_curves(run_rain, c('Observed'), rep(seq(1,depth,by=step), each = 10))
+rarefaction_curve_data_summary <- ddply(rarefaction_curve_data, c('Depth', 'Sample', 'Measure'), summarise, Alpha_diversity_mean = mean(Alpha_diversity), Alpha_diversity_sd = sd(Alpha_diversity))
+rarefaction_curve_data_summary_verbose <- merge(rarefaction_curve_data_summary, data.frame(sample_data(run_rain)), by.x = 'Sample', by.y = 'row.names')
+rarefaction_curve_data_summary_verbose$SampleID <- factor(rarefaction_curve_data_summary_verbose$SampleID,levels = map$SampleID)
+n <- dim(rarefaction_curve_data_summary_verbose)[1]
+library(RColorBrewer)
+qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
+col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+ggplot( data = rarefaction_curve_data_summary_verbose,
+        mapping = aes( x = Depth, y = Alpha_diversity_mean,
+                       ymin = Alpha_diversity_mean - Alpha_diversity_sd,
+                       ymax = Alpha_diversity_mean + Alpha_diversity_sd,
+                       colour = Description,
+                       group = SampleID)
+) +
+  scale_fill_manual(values=col_vector) +
+  geom_line( ) +
+  geom_point(size=0.5 ) +
+  guides(fill=guide_legend(title="Sample")) +
+  xlab("Sequences per sample") +
+  ylab("Observed OTU") +
+  theme(legend.text = element_text(size=10)) +
+  ggtitle("Rarefaction Curves")+
+  theme(plot.title = element_text(size = rel(2)))
 
 
 ################ The Core Rain Microbiome
@@ -222,7 +276,7 @@ tax$OTU <- rownames(tax)
 tax2 <- dplyr::filter(tax, rownames(tax) %in% list) 
 
 # Merge all the column into one except the Domain as all is bacteria in this case
-tax.unit <- tidyr::unite(tax2, Taxa_level,c("Family", "Genus","OTU"), sep = "_;", remove = TRUE)
+tax.unit <- tidyr::unite(tax2, Taxa_level,c("Family","Genus","OTU"), sep = "_;", remove = TRUE)
 ### RESULT: 23 OTUs in the Core Rain microbiome
 
 tax.unit$Taxa_level <- gsub(pattern="[a-z]__",replacement="", tax.unit$Taxa_level)
@@ -235,11 +289,12 @@ knitr::kable(head(df))
 Raincore$data <- df
 ## Detection Threshold is the Relative Abundance in %
 plot(Raincore + theme(axis.text.x=element_text(size=12,angle=0,hjust =1),
-                      axis.text.y = element_text(size = 12,face="italic"),
-                      strip.text.x = element_text(size=14,colour = "black", face = "bold"), 
-                      strip.text.y = element_text(size=18, face = 'bold'),
+                      axis.text.y = element_text(size = 12),
+                      strip.text.x = element_text(size=10,colour = "black"), 
+                      strip.text.y = element_text(size=12, face = 'bold'),
                       plot.title = element_text(size = rel(2)),
                       axis.title=element_text(size=18,face="bold", vjust = 10),
+                      legend.text = element_text(size=10),
                       plot.background = element_blank(),
                       panel.grid.major = element_blank(),
                       panel.grid.minor = element_blank()) +
@@ -447,20 +502,12 @@ ggplot( data = rarefaction_curve_data_summary_verbose,
   geom_line( ) +
   geom_point(size=0.5 ) +
   guides(fill=guide_legend(title="Sample")) +
-  theme(axis.text.x=element_text(size=12,angle=90,hjust =1),
-        axis.text.y = element_text(size = 14),
-        strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
-        strip.text.y = element_text(size=16, face = 'bold'),
-        plot.title = element_text(size = rel(2)),
-        axis.title=element_text(size=16,face="bold", vjust = 10),
-        legend.text = element_text(size=8),
-        plot.background = element_blank(),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank() +
   xlab("Sequences per sample") +
-  ylab("Observed OTU"))
+  ylab("Observed OTU") +
+  theme(legend.text = element_text(size=10)) +
   ggtitle("Rarefaction Curves")+
-  scale_y_continuous(labels=percent_format(),expand=c(0,0))
+  theme(plot.title = element_text(size = rel(2)))
+
 
 ############# ALPHA DIVERSITY INDICES 
 ##### Rarefaction  
@@ -497,7 +544,7 @@ dm_weighted_unifrac <- phyloseq::distance(run.rare_Rain_Tomato, method = "wUniFr
 ordWU_rain_Tom <- ordinate(run.rare_Rain_Tomato,method='PCoA',distance=dm_weighted_unifrac) 
 plot_ordination(run.rare_Rain_Tomato, ordWU_rain_Tom,,color = 'Source', shape='DayPoint') + 
   geom_point(size=3) + 
-  theme(axis.text.x=element_text(size=14,angle=90,hjust =1),
+  theme(axis.text.x=element_text(size=14,angle=0,hjust =1),
         axis.text.y = element_text(size = 14),
         strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=16, face = 'bold'),
@@ -515,7 +562,7 @@ dm_unweighted_unifrac <- phyloseq::distance(run.rare_Rain_Tomato, method='Unifra
 ordUU_rain_Tom <- ordinate(run.rare_Rain_Tomato,method='PCoA',distance=dm_unweighted_unifrac) 
 plot_ordination(run.rare_Rain_Tomato, ordUU_rain_Tom,,color = 'Source',shape='DayPoint') + 
   geom_point(size=3) + 
-  theme(axis.text.x=element_text(size=14,angle=90,hjust =1),
+  theme(axis.text.x=element_text(size=14,angle=0,hjust =1),
         axis.text.y = element_text(size = 14),
         strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=16, face = 'bold'),
@@ -533,15 +580,14 @@ bray_diss_rain_Tom = phyloseq::distance(run.rare_Rain_Tomato, method="bray")
 ordination_rain_Tom = ordinate(run.rare_Rain_Tomato, method="PCoA", distance=bray_diss_rain_Tom)
 plot_ordination(run.rare_Rain_Tomato, ordination_rain_Tom, color = 'Source',shape='DayPoint') + theme(aspect.ratio=1)+
   geom_point(size=3) + 
-  theme(axis.text.x=element_text(size=14,angle=90,hjust =1),
+  theme(axis.text.x=element_text(size=14,angle=0,hjust =0.5),
         axis.text.y = element_text(size = 14),
         strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=16, face = 'bold'),
         plot.title = element_text(size = rel(2)),
-        axis.title=element_text(size=16,face="bold", vjust = 10),
+        axis.title=element_text(size=14,face="bold", vjust = 10),
         legend.text = element_text(size=14)) +
-  ggtitle("PCoA: Bray-Curtis")+
-  scale_y_continuous(labels=percent_format(),expand=c(0,0))
+  ggtitle("PCoA: Bray-Curtis")
 
 adonis(bray_diss_rain_Tom ~ sample_data(run.rare_Rain_Tomato)$System)
 ### RESULTS: Permutations: 999, Df:6, F.Model: 2.2065; R2:0.21618; Pr(>F): 0.001
@@ -549,16 +595,17 @@ adonis(bray_diss_rain_Tom ~ sample_data(run.rare_Rain_Tomato)$System)
 
 ############## DIFERENCTIAL ABUNDANCES RAIN AS SOURCE OF PHYLLOSPHERE MICROBIOME
 ### Tomato plants treated with Rain: day0 vs day 7
-run_rain_deseq_1 <- subset_samples(run_Rain_Tomato, System != "FR.d0")
-run_rain_deseq_2 <- subset_samples(run_rain_deseq_1, System != "FR.d7")
-run_rain_deseq_3 <- subset_samples(run_rain_deseq_2, System != "W.d0")
-run_rain_deseq_4 <- subset_samples(run_rain_deseq_3, System != "W.d7")
-run_rain_deseq_5 <- subset_samples(run_rain_deseq_4, System != "Atm.Rain")
+run_RAIN <- subset_samples(run, System%in%c("CR.d0","CR.d7"))
+summary(sample_data(run_RAIN)$System)
+print(run_RAIN)
+######17 samples
+######30889 taxa
+sample_sums(run_RAIN)
 
-run_rain_deseq_5 <- prune_samples(sample_sums(run_rain_deseq_5) > 500, run_rain_deseq_5)
-run_rain_deseq_5
-head(sample_data(run_rain_deseq_5)$System, 25)
-deseq_rain = phyloseq_to_deseq2(run_rain_deseq_5, ~ System)
+run_RAIN <- prune_samples(sample_sums(run_RAIN) > 500, run_RAIN)
+head(sample_data(run_RAIN)$System, 25)
+
+deseq_rain = phyloseq_to_deseq2(run_RAIN, ~ System)
 # calculate geometric means prior to estimate size factors
 gm_mean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
@@ -593,29 +640,29 @@ sigtabgen$Genus = factor(as.character(sigtabgen$Genus), levels=names(x))
 ggplot(sigtabgen, aes(y=Genus, x=log2FoldChange, color=Phylum)) + 
   geom_vline(xintercept = 0.0, color = "gray", size = 0.5) +
   geom_point(size=6) + 
-  theme(axis.text.x=element_text(size=14,angle=90,hjust =1,  vjust=0.5),
-        axis.text.y = element_text(size = 11),
+  theme(axis.text.x=element_text(size=16,angle=0,hjust =1,  vjust=0.5),
+        axis.text.y = element_text(size = 16),
         strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=16, face = 'bold'),
         plot.title = element_text(size = rel(2)),
-        axis.title=element_text(size=14,face="bold", vjust = 10),
-        legend.text = element_text(size=12)) +
+        axis.title=element_text(size=16,face="bold", vjust = 10),
+        legend.text = element_text(size=14)) +
   ylab("TAXA \n") +
   xlab("Log2FoldChange") +
-  ggtitle("Differential abundance Concentrated Rain d0 vs d7")
+  ggtitle("Tomato treated with CR d0 vs d7")
 
 
 ### Tomato plants treated with Filtered Rain: day0 vs day 7
-run_FR_deseq_1 <- subset_samples(run_Rain_Tomato, System != "CR.d0")
-run_FR_deseq_2 <- subset_samples(run_FR_deseq_1, System != "CR.d7")
-run_FR_deseq_3 <- subset_samples(run_FR_deseq_2, System != "W.d0")
-run_FR_deseq_4 <- subset_samples(run_FR_deseq_3, System != "W.d7")
-run_FR_deseq_5 <- subset_samples(run_FR_deseq_4, System != "Atm.Rain")
+run_FRain <- subset_samples(run, System%in%c("FR.d0","FR.d7"))
+summary(sample_data(run_FRain)$System)
+print(run_FRain)
+######16 samples
+######30889 taxa
+sample_sums(run_FRain)
 
-run_FR_deseq_5 <- prune_samples(sample_sums(run_FR_deseq_5) > 500, run_FR_deseq_5)
-run_FR_deseq_5
-head(sample_data(run_FR_deseq_5)$System, 25)
-deseq_FR = phyloseq_to_deseq2(run_FR_deseq_5, ~ System)
+run_FRain <- prune_samples(sample_sums(run_FRain) > 500, run_FRain)
+head(sample_data(run_FRain)$System, 25)
+deseq_FR = phyloseq_to_deseq2(run_FRain, ~ System)
 # calculate geometric means prior to estimate size factors
 gm_mean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
@@ -639,16 +686,15 @@ write.csv(posigtab_FR, 'Differential_abundance_FR_d0_vs_FR_d7.csv')
 
 
 ### Tomato plants treated with Sterile Water: day0 vs day 7
-run_W_deseq_1 <- subset_samples(run_Rain_Tomato, System != "CR.d0")
-run_W_deseq_2 <- subset_samples(run_W_deseq_1, System != "CR.d7")
-run_W_deseq_3 <- subset_samples(run_W_deseq_2, System != "FR.d0")
-run_W_deseq_4 <- subset_samples(run_W_deseq_3, System != "FR.d7")
-run_W_deseq_5 <- subset_samples(run_W_deseq_4, System != "Atm.Rain")
-
-run_W_deseq_5 <- prune_samples(sample_sums(run_W_deseq_5) > 500, run_W_deseq_5)
-run_W_deseq_5
-head(sample_data(run_W_deseq_5)$System, 25)
-deseq_W = phyloseq_to_deseq2(run_W_deseq_5, ~ System)
+run_SWater <- subset_samples(run, System%in%c("W.d0","W.d7"))
+summary(sample_data(run_SWater)$System)
+print(run_SWater)
+######12 samples
+######30889 taxa
+sample_sums(run_SWater)
+run_SWater <- prune_samples(sample_sums(run_SWater) > 500, run_SWater)
+head(sample_data(run_SWater)$System, 25)
+deseq_FR = phyloseq_to_deseq2(run_SWater, ~ System)
 # calculate geometric means prior to estimate size factors
 gm_mean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
@@ -684,29 +730,29 @@ sigtabgen_W$Genus = factor(as.character(sigtabgen_W$Genus), levels=names(x))
 ggplot(sigtabgen_W, aes(y=Genus, x=log2FoldChange, color=Phylum)) + 
   geom_vline(xintercept = 0.0, color = "gray", size = 0.5) +
   geom_point(size=6) + 
-  theme(axis.text.x=element_text(size=14,angle=90,hjust =1,  vjust=0.5),
-        axis.text.y = element_text(size = 11),
+  theme(axis.text.x=element_text(size=16,angle=0,hjust =1,  vjust=0.5),
+        axis.text.y = element_text(size = 16),
         strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=16, face = 'bold'),
         plot.title = element_text(size = rel(2)),
-        axis.title=element_text(size=14,face="bold", vjust = 10),
-        legend.text = element_text(size=12)) +
+        axis.title=element_text(size=16,face="bold", vjust = 10),
+        legend.text = element_text(size=14)) +
   ylab("TAXA \n") +
   xlab("Log2FoldChange") +
-  ggtitle("Differential abundance Sterile Water d0 vs d7")
+  ggtitle("Tomato treated with Water d0 vs d7")
 
 
 ### Rain vs Tomato treated with C.Rain.day7
-run_Rain_7_deseq_1 <- subset_samples(run_Rain_Tomato, System != "FR.d0")
-run_Rain_7_deseq_2 <- subset_samples(run_Rain_7_deseq_1, System != "FR.d7")
-run_Rain_7_deseq_3 <- subset_samples(run_Rain_7_deseq_2, System != "W.d0")
-run_Rain_7_deseq_4 <- subset_samples(run_Rain_7_deseq_3, System != "W.d7")
-run_Rain_7_deseq_5 <- subset_samples(run_Rain_7_deseq_4, System != "CR.d0")
+run_R_R7 <- subset_samples(run, System%in%c("CR.d7","Atm.Rain"))
+summary(sample_data(run_R_R7)$System)
+print(run_R_R7)
+######19 samples
+######30889 taxa
+sample_sums(run_R_R7)
 
-run_Rain_7_deseq_5 <- prune_samples(sample_sums(run_Rain_7_deseq_5) > 500, run_Rain_7_deseq_5)
-run_Rain_7_deseq_5
-head(sample_data(run_Rain_7_deseq_5)$System, 25)
-deseq_Rain_7 = phyloseq_to_deseq2(run_Rain_7_deseq_5, ~ System)
+run_R_R7 <- prune_samples(sample_sums(run_R_R7) > 500, run_R_R7)
+head(sample_data(run_R_R7)$System, 25)
+deseq_Rain_7 = phyloseq_to_deseq2(run_R_R7, ~ System)
 # calculate geometric means prior to estimate size factors
 gm_mean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
@@ -740,29 +786,29 @@ sigtabgen_Rain_7$Genus = factor(as.character(sigtabgen_Rain_7$Genus), levels=nam
 ggplot(sigtabgen_Rain_7, aes(y=Genus, x=log2FoldChange, color=Phylum)) + 
   geom_vline(xintercept = 0.0, color = "gray", size = 0.5) +
   geom_point(size=4) + 
-  theme(axis.text.x=element_text(size=14,angle=90,hjust =1,  vjust=0.5),
+  theme(axis.text.x=element_text(size=16,angle=0,hjust =1,  vjust=0.5),
         axis.text.y = element_text(size = 10),
         strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=16, face = 'bold'),
         plot.title = element_text(size = rel(2)),
-        axis.title=element_text(size=14,face="bold", vjust = 10),
-        legend.text = element_text(size=12)) +
+        axis.title=element_text(size=16,face="bold", vjust = 10),
+        legend.text = element_text(size=14)) +
   ylab("TAXA \n") +
   xlab("Log2FoldChange") +
-  ggtitle("Differential abundance Rain vs CR.d7")
+  ggtitle("Rain vs Tomato treated with CR.d7")
 
 
 ### Rain vs FilteredRain day 7
-run_Rain_FR7_deseq_1 <- subset_samples(run_Rain_Tomato, System != "CR.d0")
-run_Rain_FR7_deseq_2 <- subset_samples(run_Rain_FR7_deseq_1, System != "CR.d7")
-run_Rain_FR7_deseq_3 <- subset_samples(run_Rain_FR7_deseq_2, System != "W.d0")
-run_Rain_FR7_deseq_4 <- subset_samples(run_Rain_FR7_deseq_3, System != "W.d7")
-run_Rain_FR7_deseq_5 <- subset_samples(run_Rain_FR7_deseq_4, System != "FR.d0")
+run_R_FR7 <- subset_samples(run, System%in%c("FR.d7","Atm.Rain"))
+summary(sample_data(run_R_FR7)$System)
+print(run_R_FR7)
+######18 samples
+######30889 taxa
+sample_sums(run_R_FR7)
 
-run_Rain_FR7_deseq_5 <- prune_samples(sample_sums(run_Rain_FR7_deseq_5) > 500, run_Rain_FR7_deseq_5)
-run_Rain_FR7_deseq_5
-head(sample_data(run_Rain_FR7_deseq_5)$System, 25)
-deseq_Rain_FR7 = phyloseq_to_deseq2(run_Rain_FR7_deseq_5, ~ System)
+run_R_FR7 <- prune_samples(sample_sums(run_R_FR7) > 500, run_R_FR7)
+head(sample_data(run_R_FR7)$System, 25)
+deseq_Rain_FR7 = phyloseq_to_deseq2(run_R_FR7, ~ System)
 # calculate geometric means prior to estimate size factors
 gm_mean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
@@ -796,29 +842,29 @@ sigtabgen_Rain_FR7$Genus = factor(as.character(sigtabgen_Rain_FR7$Genus), levels
 ggplot(sigtabgen_Rain_FR7, aes(y=Genus, x=log2FoldChange, color=Phylum)) + 
   geom_vline(xintercept = 0.0, color = "gray", size = 0.5) +
   geom_point(size=4) + 
-  theme(axis.text.x=element_text(size=14,angle=90,hjust =1,  vjust=0.5),
+  theme(axis.text.x=element_text(size=16,angle=0,hjust =1,  vjust=0.5),
         axis.text.y = element_text(size = 9),
         strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=16, face = 'bold'),
         plot.title = element_text(size = rel(2)),
-        axis.title=element_text(size=14,face="bold", vjust = 10),
-        legend.text = element_text(size=12)) +
+        axis.title=element_text(size=16,face="bold", vjust = 10),
+        legend.text = element_text(size=14)) +
   ylab("TAXA \n") +
   xlab("Log2FoldChange") +
-  ggtitle("Differential abundance Rain vs FR.d7")
+  ggtitle("Rain vs tomato treated with FR.d7")
 
 
 ### Rain vs Tomato treated with Sterile Water day 7
-run_Rain_W7_deseq_1 <- subset_samples(run_Rain_Tomato, System != "CR.d0")
-run_Rain_W7_deseq_2 <- subset_samples(run_Rain_W7_deseq_1, System != "CR.d7")
-run_Rain_W7_deseq_3 <- subset_samples(run_Rain_W7_deseq_2, System != "FR.d0")
-run_Rain_W7_deseq_4 <- subset_samples(run_Rain_W7_deseq_3, System != "FR.d7")
-run_Rain_W7_deseq_5 <- subset_samples(run_Rain_W7_deseq_4, System != "W.d0")
+run_R_SW7 <- subset_samples(run, System%in%c("W.d7","Atm.Rain"))
+summary(sample_data(run_R_SW7)$System)
+print(run_R_SW7)
+######18 samples
+######30889 taxa
+sample_sums(run_R_SW7)
 
-run_Rain_W7_deseq_5 <- prune_samples(sample_sums(run_Rain_W7_deseq_5) > 500, run_Rain_W7_deseq_5)
-run_Rain_W7_deseq_5
-head(sample_data(run_Rain_W7_deseq_5)$System, 25)
-deseq_Rain_W7 = phyloseq_to_deseq2(run_Rain_W7_deseq_5, ~ System)
+run_R_SW7 <- prune_samples(sample_sums(run_R_SW7) > 500, run_R_SW7)
+head(sample_data(run_R_SW7)$System, 25)
+deseq_Rain_W7 = phyloseq_to_deseq2(run_R_SW7, ~ System)
 # calculate geometric means prior to estimate size factors
 gm_mean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
@@ -852,29 +898,29 @@ sigtabgen_Rain_W7$Genus = factor(as.character(sigtabgen_Rain_W7$Genus), levels=n
 ggplot(sigtabgen_Rain_W7, aes(y=Genus, x=log2FoldChange, color=Phylum)) + 
   geom_vline(xintercept = 0.0, color = "gray", size = 0.5) +
   geom_point(size=4) + 
-  theme(axis.text.x=element_text(size=14,angle=90,hjust =1,  vjust=0.5),
+  theme(axis.text.x=element_text(size=16,angle=0,hjust =1,  vjust=0.5),
         axis.text.y = element_text(size = 9),
         strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=16, face = 'bold'),
         plot.title = element_text(size = rel(2)),
-        axis.title=element_text(size=14,face="bold", vjust = 10),
-        legend.text = element_text(size=12)) +
+        axis.title=element_text(size=16,face="bold", vjust = 10),
+        legend.text = element_text(size=14)) +
   ylab("TAXA \n") +
   xlab("Log2FoldChange") +
-  ggtitle("Differential abundance Rain vs W.d7")
+  ggtitle("Rain vs tomato treated with W.d7")
 
 
 ###### Rain vs Tomato Treated with rain day 0
-run_Rain_0_deseq_1 <- subset_samples(run_Rain_Tomato, System != "FR.d0")
-run_Rain_0_deseq_2 <- subset_samples(run_Rain_0_deseq_1, System != "FR.d7")
-run_Rain_0_deseq_3 <- subset_samples(run_Rain_0_deseq_2, System != "W.d0")
-run_Rain_0_deseq_4 <- subset_samples(run_Rain_0_deseq_3, System != "W.d7")
-run_Rain_0_deseq_5 <- subset_samples(run_Rain_0_deseq_4, System != "CR.d7")
+run_R_R0 <- subset_samples(run, System%in%c("CR.d0","Atm.Rain"))
+summary(sample_data(run_R_R0)$System)
+print(run_R_R0)
+######18 samples
+######30889 taxa
+sample_sums(run_R_R0)
 
-run_Rain_0_deseq_5 <- prune_samples(sample_sums(run_Rain_0_deseq_5) > 500, run_Rain_0_deseq_5)
-run_Rain_0_deseq_5
-head(sample_data(run_Rain_0_deseq_5)$System, 25)
-deseq_Rain_0 = phyloseq_to_deseq2(run_Rain_0_deseq_5, ~ System)
+run_R_R0 <- prune_samples(sample_sums(run_R_R0) > 500, run_R_R0)
+head(sample_data(run_R_R0)$System, 25)
+deseq_Rain_0 = phyloseq_to_deseq2(run_R_R0, ~ System)
 # calculate geometric means prior to estimate size factors
 gm_mean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
@@ -908,29 +954,29 @@ sigtabgen_Rain_0$Genus = factor(as.character(sigtabgen_Rain_0$Genus), levels=nam
 ggplot(sigtabgen_Rain_0, aes(y=Genus, x=log2FoldChange, color=Phylum)) + 
   geom_vline(xintercept = 0.0, color = "gray", size = 0.5) +
   geom_point(size=4) + 
-  theme(axis.text.x=element_text(size=14,angle=90,hjust =1,  vjust=0.5),
+  theme(axis.text.x=element_text(size=16,angle=0,hjust =1,  vjust=0.5),
         axis.text.y = element_text(size = 9),
         strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=16, face = 'bold'),
         plot.title = element_text(size = rel(2)),
-        axis.title=element_text(size=14,face="bold", vjust = 10),
-        legend.text = element_text(size=12)) +
+        axis.title=element_text(size=16,face="bold", vjust = 10),
+        legend.text = element_text(size=14)) +
   ylab("TAXA \n") +
   xlab("Log2FoldChange") +
-  ggtitle("Differential abundance Rain vs CR.d0")
+  ggtitle("Rain vs Tomato treated with CR.d0")
 
 
 ### Rain vs tomato treated with Filtered Rain day 0
-run_Rain_FR0_deseq_1 <- subset_samples(run_Rain_Tomato, System != "CR.d0")
-run_Rain_FR0_deseq_2 <- subset_samples(run_Rain_FR0_deseq_1, System != "CR.d7")
-run_Rain_FR0_deseq_3 <- subset_samples(run_Rain_FR0_deseq_2, System != "W.d0")
-run_Rain_FR0_deseq_4 <- subset_samples(run_Rain_FR0_deseq_3, System != "W.d7")
-run_Rain_FR0_deseq_5 <- subset_samples(run_Rain_FR0_deseq_4, System != "FR.d7")
+run_R_FR0 <- subset_samples(run, System%in%c("FR.d0","Atm.Rain"))
+summary(sample_data(run_R_FR0)$System)
+print(run_R_FR0)
+######18 samples
+######30889 taxa
+sample_sums(run_R_FR0)
 
-run_Rain_FR0_deseq_5 <- prune_samples(sample_sums(run_Rain_FR0_deseq_5) > 500, run_Rain_FR0_deseq_5)
-run_Rain_FR0_deseq_5
-head(sample_data(run_Rain_FR0_deseq_5)$System, 25)
-deseq_Rain_FR0 = phyloseq_to_deseq2(run_Rain_FR0_deseq_5, ~ System)
+run_R_FR0 <- prune_samples(sample_sums(run_R_FR0) > 500, run_R_FR0)
+head(sample_data(run_R_FR0)$System, 25)
+deseq_Rain_FR0 = phyloseq_to_deseq2(run_R_FR0, ~ System)
 # calculate geometric means prior to estimate size factors
 gm_mean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
@@ -951,7 +997,6 @@ posigtab_Rain_FR0 = posigtab_Rain_FR0[, c("baseMean", "log2FoldChange", "lfcSE",
 
 write.csv(posigtab_Rain_FR0, 'Differential_abundance_Rain_vs_tomato_FR0.csv')
 
-library("ggplot2")
 theme_set(theme_bw())
 sigtabgen_Rain_FR0 = subset(sigtab_Rain_FR0, !is.na(Genus))
 # Phylum order
@@ -965,29 +1010,29 @@ sigtabgen_Rain_FR0$Genus = factor(as.character(sigtabgen_Rain_FR0$Genus), levels
 ggplot(sigtabgen_Rain_FR0, aes(y=Genus, x=log2FoldChange, color=Phylum)) + 
   geom_vline(xintercept = 0.0, color = "gray", size = 0.5) +
   geom_point(size=4) + 
-  theme(axis.text.x=element_text(size=14,angle=90,hjust =1,  vjust=0.5),
+  theme(axis.text.x=element_text(size=16,angle=0,hjust =1,  vjust=0.5),
         axis.text.y = element_text(size = 8),
         strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=16, face = 'bold'),
         plot.title = element_text(size = rel(2)),
-        axis.title=element_text(size=14,face="bold", vjust = 10),
-        legend.text = element_text(size=12)) +
+        axis.title=element_text(size=16,face="bold", vjust = 10),
+        legend.text = element_text(size=14)) +
   ylab("TAXA \n") +
   xlab("Log2FoldChange") +
-  ggtitle("Differential abundance Rain vs FR.d0")
+  ggtitle("Rain vs Tomato treated with FR.d0")
 
 
 ### Rain vs Tomato treated with sterile Water day 0
-run_Rain_W0_deseq_1 <- subset_samples(run_Rain_Tomato, System != "CR.d0")
-run_Rain_W0_deseq_2 <- subset_samples(run_Rain_W0_deseq_1, System != "CR.d7")
-run_Rain_W0_deseq_3 <- subset_samples(run_Rain_W0_deseq_2, System != "FR.d0")
-run_Rain_W0_deseq_4 <- subset_samples(run_Rain_W0_deseq_3, System != "FR.d7")
-run_Rain_W0_deseq_5 <- subset_samples(run_Rain_W0_deseq_4, System != "W.d7")
+run_R_SW0 <- subset_samples(run, System%in%c("W.d0","Atm.Rain"))
+summary(sample_data(run_R_SW0)$System)
+print(run_R_SW0)
+######18 samples
+######30889 taxa
+sample_sums(run_R_SW0)
 
-run_Rain_W0_deseq_5 <- prune_samples(sample_sums(run_Rain_W0_deseq_5) > 500, run_Rain_W0_deseq_5)
-run_Rain_W0_deseq_5
-head(sample_data(run_Rain_W0_deseq_5)$System, 25)
-deseq_Rain_W0 = phyloseq_to_deseq2(run_Rain_W0_deseq_5, ~ System)
+run_R_SW0 <- prune_samples(sample_sums(run_R_SW0) > 500, run_R_SW0)
+head(sample_data(run_R_SW0)$System, 25)
+deseq_Rain_W0 = phyloseq_to_deseq2(run_R_SW0, ~ System)
 # calculate geometric means prior to estimate size factors
 gm_mean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
@@ -1021,16 +1066,16 @@ sigtabgen_Rain_W0$Genus = factor(as.character(sigtabgen_Rain_W0$Genus), levels=n
 ggplot(sigtabgen_Rain_W0, aes(y=Genus, x=log2FoldChange, color=Phylum)) + 
   geom_vline(xintercept = 0.0, color = "gray", size = 0.5) +
   geom_point(size=4) + 
-  theme(axis.text.x=element_text(size=14,angle=90,hjust =1,  vjust=0.5),
+  theme(axis.text.x=element_text(size=16,angle=0,hjust =1,  vjust=0.5),
         axis.text.y = element_text(size = 8),
         strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=16, face = 'bold'),
         plot.title = element_text(size = rel(2)),
-        axis.title=element_text(size=14,face="bold", vjust = 10),
-        legend.text = element_text(size=12)) +
+        axis.title=element_text(size=16,face="bold", vjust = 10),
+        legend.text = element_text(size=14)) +
   ylab("TAXA \n") +
   xlab("Log2FoldChange") +
-  ggtitle("Differential abundance Rain vs W.d0")
+  ggtitle("Rain vs Tomato treated with W.d0")
 
 
 #################################################################################################
@@ -1292,7 +1337,7 @@ ordination = ordinate(run_RSF_rarefied, method="PCoA", distance=bray_diss)
 #### Plot
 plot_ordination(run_RSF_rarefied, ordination, color = 'System') + theme(aspect.ratio=1)+
   geom_point(size=5) + 
-  theme(axis.text.x=element_text(size=14,angle=90,hjust =1),
+  theme(axis.text.x=element_text(size=14,angle=0,hjust =1),
         axis.text.y = element_text(size = 14),
         strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=16, face = 'bold'),
