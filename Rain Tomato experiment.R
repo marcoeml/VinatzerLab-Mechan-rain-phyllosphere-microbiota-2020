@@ -39,19 +39,18 @@ colnames(tax_table(run)) <- c("Kingdom", "Phylum", "Class",
 
 ## Subsample-Only rain samples:
 run_rain <- subset_samples(run, Source%in%c("Rain"))
-summary(sample_data(run_rain)$Source)
-print(run_rain)
-###### phyloseq-class experiment-level object
-###### otu_table()   OTU Table:         [ 30889 taxa and 10 samples ]
-###### sample_data() Sample Data:       [ 10 samples by 11 sample variables ]
-###### tax_table()   Taxonomy Table:    [ 30889 taxa by 7 taxonomic ranks ]
-###### phy_tree()    Phylogenetic Tree: [ 30889 tips and 30750 internal nodes ]OTUs########
-sample_sums(run_rain)
+run_rain1 <- prune_taxa(taxa_sums(run_rain) > 0, run_rain)
+summary(sample_data(run_rain1)$Source)
+print(run_rain1)
+###### 10 Samples ########
+###### 13104 taxa ########
+write.csv(otu_table(run_rain1), 'run_rain_OTU_table.csv')
+sample_sums(run_rain1)
 
 ########### Relative abundance of the Rain Microbiome
 
 ## Phylum relative abundance
-run_phylum_rain <- run_rain %>%
+run_phylum_rain <- run_rain1 %>%
   tax_glom(taxrank = "Phylum") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
@@ -87,7 +86,7 @@ ggplot(run_phylum_rain,aes(x=Time,y=Abundance,fill=Phylum)) +
 
 
 ##Class relative abundance
-run_class_rain <- run_rain %>%
+run_class_rain <- run_rain1 %>%
   tax_glom(taxrank = "Class") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
@@ -123,7 +122,7 @@ ggplot(run_class_rain,aes(x=Time,y=Abundance,fill=Class)) +
   scale_y_continuous(labels=percent_format(),expand=c(0,0))
 
 ##Genus relative abundance
-run_genus_rain <- run_rain %>%
+run_genus_rain <- run_rain1 %>%
   tax_glom(taxrank = "Genus") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
@@ -180,7 +179,7 @@ calculate_rarefaction_curves <- function(psdata, measures, depths) {
 ## Sequencing depth - Rarefaction curves plots
 depth = 100000
 step = 1000
-rarefaction_curve_data <- calculate_rarefaction_curves(run_rain, c('Observed'), rep(seq(1,depth,by=step), each = 10))
+rarefaction_curve_data <- calculate_rarefaction_curves(run_rain1, c('Observed'), rep(seq(1,depth,by=step), each = 10))
 rarefaction_curve_data_summary <- ddply(rarefaction_curve_data, c('Depth', 'Sample', 'Measure'), summarise, Alpha_diversity_mean = mean(Alpha_diversity), Alpha_diversity_sd = sd(Alpha_diversity))
 rarefaction_curve_data_summary_verbose <- merge(rarefaction_curve_data_summary, data.frame(sample_data(run_rain)), by.x = 'Sample', by.y = 'row.names')
 rarefaction_curve_data_summary_verbose$SampleID <- factor(rarefaction_curve_data_summary_verbose$SampleID,levels = map$SampleID)
@@ -209,8 +208,8 @@ ggplot( data = rarefaction_curve_data_summary_verbose,
 ################ The Core Rain Microbiome
 
 ## Rarefaction to calculate core microbiome
-run_rain.rarefied = rarefy_even_depth(run_rain, rngseed=1, sample.size=1*min(sample_sums(run_rain)), replace=F)
-sample_sums(run_rain)
+run_rain.rarefied = rarefy_even_depth(run_rain1, rngseed=1, sample.size=1*min(sample_sums(run_rain1)), replace=F)
+sample_sums(run_rain1)
 sample_sums(run_rain.rarefied)
   ## RESULTS: 
     ## Samples were rarefied to 7133 reads per sample
@@ -278,9 +277,7 @@ tax2 <- dplyr::filter(tax, rownames(tax) %in% list)
 # Merge all the column into one except the Domain as all is bacteria in this case
 tax.unit <- tidyr::unite(tax2, Taxa_level,c("Family","Genus","OTU"), sep = "_;", remove = TRUE)
 ### RESULT: 23 OTUs in the Core Rain microbiome
-
 tax.unit$Taxa_level <- gsub(pattern="[a-z]__",replacement="", tax.unit$Taxa_level)
-
 # add this new information into the plot data df
 df$Taxa <- tax.unit$Taxa_level
 # Taxonomic information
@@ -300,16 +297,53 @@ plot(Raincore + theme(axis.text.x=element_text(size=12,angle=0,hjust =1),
                       panel.grid.minor = element_blank()) +
                 xlab("Detection threshold (Relative abundance %) "))
 
+
 ###############################################################################################
 ###################### 2) RAIN AS A SOURCE OF THE PHYLLOSPHERE MICROBIOME #####################
 
+######## Number of OTUs ########
+OTU_CR_day0 <- subset_samples(run, System%in%c("CR.d0"))
+OTU_CR_d0 <- prune_taxa(taxa_sums(OTU_CR_day0) > 0, OTU_CR_day0)
+summary(sample_data(OTU_CR_d0)$System)
+print(OTU_CR_d0) ######### 8 samples #### 7994 TAXA ########
+
+OTU_CR_day7 <- subset_samples(run, System%in%c("CR.d7"))
+OTU_CR_d7 <- prune_taxa(taxa_sums(OTU_CR_day7) > 0, OTU_CR_day7)
+summary(sample_data(OTU_CR_d7)$System)
+print(OTU_CR_d7) ######### 9 samples #### 10672 TAXA ########
+
+OTU_FR_day0 <- subset_samples(run, System%in%c("FR.d0"))
+OTU_FR_d0 <- prune_taxa(taxa_sums(OTU_FR_day0) > 0, OTU_FR_day0)
+summary(sample_data(OTU_FR_d0)$System)
+print(OTU_FR_d0) ######### 8 samples #### 6644 TAXA ########
+
+OTU_FR_day7 <- subset_samples(run, System%in%c("FR.d7"))
+OTU_FR_d7 <- prune_taxa(taxa_sums(OTU_FR_day7) > 0, OTU_FR_day7)
+summary(sample_data(OTU_FR_d7)$System)
+print(OTU_FR_d7) ######### 8 samples #### 8982 TAXA ########
+
+OTU_W_day0 <- subset_samples(run, System%in%c("W.d0"))
+OTU_W_d0 <- prune_taxa(taxa_sums(OTU_W_day0) > 0, OTU_W_day0)
+summary(sample_data(OTU_W_d0)$System)
+print(OTU_W_d0) ######### 6 samples #### 5827 TAXA ########
+
+OTU_W_day7 <- subset_samples(run, System%in%c("W.d7"))
+OTU_W_d7 <- prune_taxa(taxa_sums(OTU_W_day7) > 0, OTU_W_day7)
+summary(sample_data(OTU_W_d7)$System)
+print(OTU_W_d7) ######### 6 samples #### 7882 TAXA ########
+
 ## Subsample-Only laboratory innoculated tomato plants with rain samples:
 run_rain_Tom <- subset_samples(run, Source%in%c("Concentrated.Rain","Filtered.Rain","Sterile.Water"))
-summary(sample_data(run_rain_Tom)$Source)
+run_rain_Tom1 <- prune_taxa(taxa_sums(run_rain_Tom) > 0, run_rain_Tom)
+summary(sample_data(run_rain_Tom1)$Source)
+print(run_rain_Tom1)
+###### 13104 taxa ########
+write.csv(otu_table(run_rain_Tom1), 'run_Rain_Tomato_OTU_table.csv')
+sample_sums(run_rain_Tom1)
 
 ################### Relative abundance 
 ## Phylum relative abundance
-run_phylum_rain_Tomato <- run_rain_Tom %>%
+run_phylum_rain_Tomato <- run_rain_Tom1 %>%
   tax_glom(taxrank = "Phylum") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
@@ -346,7 +380,7 @@ ggplot(run_phylum_rain_Tomato,aes(x=Description,y=Abundance,fill=Phylum)) +
 
 
 ##Class relative abundance
-run_class_rain_Tomato <- run_rain_Tom %>%
+run_class_rain_Tomato <- run_rain_Tom1 %>%
   tax_glom(taxrank = "Class") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
@@ -383,7 +417,7 @@ ggplot(run_class_rain_Tomato,aes(x=Description,y=Abundance,fill=Class)) +
 
 
 ## Family relative abundance
-run_family_rain_Tomato <- run_rain_Tom %>%
+run_family_rain_Tomato <- run_rain_Tom1 %>%
   tax_glom(taxrank = "Family") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
@@ -420,14 +454,14 @@ ggplot(run_family_rain_Tomato,aes(x=Description,y=Abundance,fill=Family)) +
 
 
 ## Genus relative abundance
-run_genus_rain_Tomato <- run_rain_Tom %>%
+run_genus_rain_Tomato <- run_rain_Tom1 %>%
   tax_glom(taxrank = "Genus") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
-  filter(Abundance > 0.03) %>%
+  filter(Abundance > 0.001) %>%
   arrange(Genus)
 
-write.csv(run_genus_rain_Tomato, 'run_genus_rain_Tomato_abun03.csv')
+write.csv(run_genus_rain_Tomato, 'run_genus_rain_Tomato_abun001.csv')
 
 library(RColorBrewer)
 n <- dim(run_genus_rain_Tomato)[1]
@@ -596,16 +630,17 @@ adonis(bray_diss_rain_Tom ~ sample_data(run.rare_Rain_Tomato)$System)
 ############## DIFERENCTIAL ABUNDANCES RAIN AS SOURCE OF PHYLLOSPHERE MICROBIOME
 ### Tomato plants treated with Rain: day0 vs day 7
 run_RAIN <- subset_samples(run, System%in%c("CR.d0","CR.d7"))
-summary(sample_data(run_RAIN)$System)
-print(run_RAIN)
-######17 samples
-######30889 taxa
-sample_sums(run_RAIN)
+run_RAIN1 <- prune_taxa(taxa_sums(run_RAIN) > 0, run_RAIN)
+summary(sample_data(run_RAIN1)$System)
+print(run_RAIN1)
+###### 17 samples
+###### 13904 taxa
+sample_sums(run_RAIN1)
 
-run_RAIN <- prune_samples(sample_sums(run_RAIN) > 500, run_RAIN)
-head(sample_data(run_RAIN)$System, 25)
+run_RAIN1 <- prune_samples(sample_sums(run_RAIN1) > 500, run_RAIN1)
+head(sample_data(run_RAIN1)$System, 25)
 
-deseq_rain = phyloseq_to_deseq2(run_RAIN, ~ System)
+deseq_rain = phyloseq_to_deseq2(run_RAIN1, ~ System)
 # calculate geometric means prior to estimate size factors
 gm_mean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
@@ -618,14 +653,19 @@ res = results(deseq_rain)
 res = res[order(res$padj, na.last=NA), ]
 alpha = 0.01
 sigtab = res[(res$padj < alpha), ]
-sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(run_rain_deseq_5)[rownames(sigtab), ], "matrix"))
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(run_RAIN1)[rownames(sigtab), ], "matrix"))
 head(sigtab)
+##### To write all OTUs that were significant different: positives and negatives
+sigtab = sigtab[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
 
+write.csv(sigtab, 'DEseq_all_values_RAINd0_vs_RAINd7.csv')
+###### RESULT: 116 TAXA differentially abundant ##############
+##### To subset positives values
 posigtab = sigtab[sigtab[, "log2FoldChange"] > 0, ]
 posigtab = posigtab[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
 
 write.csv(posigtab, 'Differential_abundance_RAINd0_vs_RAINd7.csv')
-###### RESULT: 95 TAXA differentially abundant ##############
+###### RESULT: 104 TAXA differentially abundant ##############
 
 theme_set(theme_bw())
 sigtabgen = subset(sigtab, !is.na(Genus))
@@ -654,15 +694,16 @@ ggplot(sigtabgen, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
 
 ### Tomato plants treated with Filtered Rain: day0 vs day 7
 run_FRain <- subset_samples(run, System%in%c("FR.d0","FR.d7"))
-summary(sample_data(run_FRain)$System)
-print(run_FRain)
-######16 samples
-######30889 taxa
-sample_sums(run_FRain)
+run_FRAIN1 <- prune_taxa(taxa_sums(run_FRain) > 0, run_FRain)
+summary(sample_data(run_FRAIN1)$System)
+print(run_FRAIN1)
+###### 16 samples
+###### 11298 taxa
+sample_sums(run_FRAIN1)
 
-run_FRain <- prune_samples(sample_sums(run_FRain) > 500, run_FRain)
-head(sample_data(run_FRain)$System, 25)
-deseq_FR = phyloseq_to_deseq2(run_FRain, ~ System)
+run_FRAIN1 <- prune_samples(sample_sums(run_FRAIN1) > 500, run_FRAIN1)
+head(sample_data(run_FRAIN1)$System, 25)
+deseq_FR = phyloseq_to_deseq2(run_FRAIN1, ~ System)
 # calculate geometric means prior to estimate size factors
 gm_mean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
@@ -675,9 +716,14 @@ res_FR = results(deseq_FR)
 res_FR = res_FR[order(res_FR$padj, na.last=NA), ]
 alpha = 0.01
 sigtab_FR = res_FR[(res_FR$padj < alpha), ]
-sigtab_FR = cbind(as(sigtab_FR, "data.frame"), as(tax_table(run_FR_deseq_5)[rownames(sigtab_FR), ], "matrix"))
+sigtab_FR = cbind(as(sigtab_FR, "data.frame"), as(tax_table(run_FRAIN1)[rownames(sigtab_FR), ], "matrix"))
 head(sigtab_FR)
+##### To write all OTUs that were significant different: positives and negatives
+sigtab_FR = sigtab_FR[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
 
+write.csv(sigtab_FR, 'DEseq_all_values_FilRAINd0_vs_FilRAINd7.csv')
+###### RESULT: 0 TAXA differentially abundant ##############
+##### To subset positives values
 posigtab_FR = sigtab_FR[sigtab_FR[, "log2FoldChange"] > 0, ]
 posigtab_FR = posigtab_FR[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
 
@@ -687,14 +733,15 @@ write.csv(posigtab_FR, 'Differential_abundance_FR_d0_vs_FR_d7.csv')
 
 ### Tomato plants treated with Sterile Water: day0 vs day 7
 run_SWater <- subset_samples(run, System%in%c("W.d0","W.d7"))
-summary(sample_data(run_SWater)$System)
-print(run_SWater)
-######12 samples
-######30889 taxa
-sample_sums(run_SWater)
-run_SWater <- prune_samples(sample_sums(run_SWater) > 500, run_SWater)
-head(sample_data(run_SWater)$System, 25)
-deseq_FR = phyloseq_to_deseq2(run_SWater, ~ System)
+run_SW1 <- prune_taxa(taxa_sums(run_SWater) > 0, run_SWater)
+summary(sample_data(run_SW1)$System)
+print(run_SW1)
+###### 12 samples
+###### 9929 taxa
+sample_sums(run_SW1)
+run_SW1 <- prune_samples(sample_sums(run_SW1) > 500, run_SW1)
+head(sample_data(run_SW1)$System, 25)
+deseq_FR = phyloseq_to_deseq2(run_SW1, ~ System)
 # calculate geometric means prior to estimate size factors
 gm_mean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
@@ -707,9 +754,14 @@ res_W = results(deseq_W)
 res_W = res_W[order(res_W$padj, na.last=NA), ]
 alpha = 0.01
 sigtab_W = res_W[(res_W$padj < alpha), ]
-sigtab_W = cbind(as(sigtab_W, "data.frame"), as(tax_table(run_W_deseq_5)[rownames(sigtab_W), ], "matrix"))
+sigtab_W = cbind(as(sigtab_W, "data.frame"), as(tax_table(run_SW1)[rownames(sigtab_W), ], "matrix"))
 head(sigtab_W)
+##### To write all OTUs that were significant different: positives and negatives
+sigtab_W = sigtab_W[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
 
+write.csv(sigtab_W, 'DEseq_all_values_SWaterd0_vs_SWaterd7.csv')
+###### RESULT: 0 TAXA differentially abundant ##############
+##### To subset positives values
 posigtab_W = sigtab_W[sigtab_W[, "log2FoldChange"] > 0, ]
 posigtab_W = posigtab_W[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
 
@@ -744,15 +796,16 @@ ggplot(sigtabgen_W, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
 
 ### Rain vs Tomato treated with C.Rain.day7
 run_R_R7 <- subset_samples(run, System%in%c("CR.d7","Atm.Rain"))
-summary(sample_data(run_R_R7)$System)
-print(run_R_R7)
-######19 samples
-######30889 taxa
-sample_sums(run_R_R7)
+run_R_CR7 <- prune_taxa(taxa_sums(run_R_R7) > 0, run_R_R7)
+summary(sample_data(run_R_CR7)$System)
+print(run_R_CR7)
+###### 19 samples
+###### 18870 taxa
+sample_sums(run_R_CR7)
 
-run_R_R7 <- prune_samples(sample_sums(run_R_R7) > 500, run_R_R7)
-head(sample_data(run_R_R7)$System, 25)
-deseq_Rain_7 = phyloseq_to_deseq2(run_R_R7, ~ System)
+run_R_CR7 <- prune_samples(sample_sums(run_R_CR7) > 500, run_R_CR7)
+head(sample_data(run_R_CR7)$System, 25)
+deseq_Rain_7 = phyloseq_to_deseq2(run_R_CR7, ~ System)
 # calculate geometric means prior to estimate size factors
 gm_mean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
@@ -765,14 +818,19 @@ res_Rain_7 = results(deseq_Rain_7)
 res_Rain_7 = res_Rain_7[order(res_Rain_7$padj, na.last=NA), ]
 alpha = 0.01
 sigtab_Rain_7 = res_Rain_7[(res_Rain_7$padj < alpha), ]
-sigtab_Rain_7 = cbind(as(sigtab_Rain_7, "data.frame"), as(tax_table(run_Rain_7_deseq_5)[rownames(sigtab_Rain_7), ], "matrix"))
+sigtab_Rain_7 = cbind(as(sigtab_Rain_7, "data.frame"), as(tax_table(run_R_CR7)[rownames(sigtab_Rain_7), ], "matrix"))
 head(sigtab_Rain_7)
+##### To write all OTUs that were significant different: positives and negatives
+sigtab_Rain_7 = sigtab_Rain_7[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
 
+write.csv(sigtab_Rain_7, 'DEseq_all_values_Rain_vs_CRd7.csv')
+###### RESULT: 187 TAXA differentially abundant ##############
+##### To subset positives values
 posigtab_Rain_7 = sigtab_Rain_7[sigtab_Rain_7[, "log2FoldChange"] > 0, ]
 posigtab_Rain_7 = posigtab_Rain_7[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
 
 write.csv(posigtab_Rain_7, 'Differential_abundance_Rain_vs_rain7.csv')
-
+###### RESULT: 66 TAXA differentially abundant ##############
 theme_set(theme_bw())
 sigtabgen_Rain_7 = subset(sigtab_Rain_7, !is.na(Genus))
 # Phylum order
@@ -799,11 +857,12 @@ ggplot(sigtabgen_Rain_7, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
 
 
 ### Rain vs FilteredRain day 7
-run_R_FR7 <- subset_samples(run, System%in%c("FR.d7","Atm.Rain"))
+run_Rain_FR7 <- subset_samples(run, System%in%c("FR.d7","Atm.Rain"))
+run_R_FR7 <- prune_taxa(taxa_sums(run_Rain_FR7) > 0, run_Rain_FR7)
 summary(sample_data(run_R_FR7)$System)
 print(run_R_FR7)
-######18 samples
-######30889 taxa
+###### 18 samples
+###### 18145 taxa
 sample_sums(run_R_FR7)
 
 run_R_FR7 <- prune_samples(sample_sums(run_R_FR7) > 500, run_R_FR7)
@@ -821,13 +880,18 @@ res_Rain_FR7 = results(deseq_Rain_FR7)
 res_Rain_FR7 = res_Rain_FR7[order(res_Rain_FR7$padj, na.last=NA), ]
 alpha = 0.01
 sigtab_Rain_FR7 = res_Rain_FR7[(res_Rain_FR7$padj < alpha), ]
-sigtab_Rain_FR7 = cbind(as(sigtab_Rain_FR7, "data.frame"), as(tax_table(run_Rain_FR7_deseq_5)[rownames(sigtab_Rain_FR7), ], "matrix"))
+sigtab_Rain_FR7 = cbind(as(sigtab_Rain_FR7, "data.frame"), as(tax_table(run_R_FR7)[rownames(sigtab_Rain_FR7), ], "matrix"))
 head(sigtab_Rain_FR7)
+##### To write all OTUs that were significant different: positives and negatives
+sigtab_Rain_FR7 = sigtab_Rain_FR7[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
 
+write.csv(sigtab_Rain_FR7, 'DEseq_all_values_Rain_vs_FRd7.csv')
+###### RESULT: 294 TAXA differentially abundant ##############
+##### To subset positives values
 posigtab_Rain_FR7 = sigtab_Rain_FR7[sigtab_Rain_FR7[, "log2FoldChange"] > 0, ]
 posigtab_Rain_FR7 = posigtab_Rain_FR7[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
-
 write.csv(posigtab_Rain_FR7, 'Differential_abundance_Rain_vs_FR7.csv')
+###### RESULT: 91 TAXA differentially abundant ##############
 
 theme_set(theme_bw())
 sigtabgen_Rain_FR7 = subset(sigtab_Rain_FR7, !is.na(Genus))
@@ -855,11 +919,12 @@ ggplot(sigtabgen_Rain_FR7, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
 
 
 ### Rain vs Tomato treated with Sterile Water day 7
-run_R_SW7 <- subset_samples(run, System%in%c("W.d7","Atm.Rain"))
+run_R_SWater7 <- subset_samples(run, System%in%c("W.d7","Atm.Rain"))
+run_R_SW7 <- prune_taxa(taxa_sums(run_R_SWater7) > 0, run_R_SWater7)
 summary(sample_data(run_R_SW7)$System)
 print(run_R_SW7)
-######18 samples
-######30889 taxa
+###### 16 samples
+###### 17829 taxa
 sample_sums(run_R_SW7)
 
 run_R_SW7 <- prune_samples(sample_sums(run_R_SW7) > 500, run_R_SW7)
@@ -877,14 +942,18 @@ res_Rain_W7 = results(deseq_Rain_W7)
 res_Rain_W7 = res_Rain_W7[order(res_Rain_W7$padj, na.last=NA), ]
 alpha = 0.01
 sigtab_Rain_W7 = res_Rain_W7[(res_Rain_W7$padj < alpha), ]
-sigtab_Rain_W7 = cbind(as(sigtab_Rain_W7, "data.frame"), as(tax_table(run_Rain_W7_deseq_5)[rownames(sigtab_Rain_W7), ], "matrix"))
+sigtab_Rain_W7 = cbind(as(sigtab_Rain_W7, "data.frame"), as(tax_table(run_R_SW7)[rownames(sigtab_Rain_W7), ], "matrix"))
 head(sigtab_Rain_W7)
+##### To write all OTUs that were significant different: positives and negatives
+sigtab_Rain_W7 = sigtab_Rain_W7[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
 
+write.csv(sigtab_Rain_W7, 'DEseq_all_values_Rain_vs_SWd7.csv')
+###### RESULT: 364 TAXA differentially abundant ##############
+##### To subset positives values
 posigtab_Rain_W7 = sigtab_Rain_W7[sigtab_Rain_W7[, "log2FoldChange"] > 0, ]
 posigtab_Rain_W7 = posigtab_Rain_W7[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
-
 write.csv(posigtab_Rain_W7, 'Differential_abundance_Rain_Water7.csv')
-
+###### RESULT: 154 TAXA differentially abundant ##############
 theme_set(theme_bw())
 sigtabgen_Rain_W7 = subset(sigtab_Rain_W7, !is.na(Genus))
 # Phylum order
@@ -912,15 +981,16 @@ ggplot(sigtabgen_Rain_W7, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
 
 ###### Rain vs Tomato Treated with rain day 0
 run_R_R0 <- subset_samples(run, System%in%c("CR.d0","Atm.Rain"))
-summary(sample_data(run_R_R0)$System)
-print(run_R_R0)
-######18 samples
-######30889 taxa
-sample_sums(run_R_R0)
+run_R_CR0 <- prune_taxa(taxa_sums(run_R_R0) > 0, run_R_R0)
+summary(sample_data(run_R_CR0)$System)
+print(run_R_CR0)
+###### 18 samples
+###### 16917 taxa
+sample_sums(run_R_CR0)
 
-run_R_R0 <- prune_samples(sample_sums(run_R_R0) > 500, run_R_R0)
-head(sample_data(run_R_R0)$System, 25)
-deseq_Rain_0 = phyloseq_to_deseq2(run_R_R0, ~ System)
+run_R_CR0 <- prune_samples(sample_sums(run_R_CR0) > 500, run_R_CR0)
+head(sample_data(run_R_CR0)$System, 25)
+deseq_Rain_0 = phyloseq_to_deseq2(run_R_CR0, ~ System)
 # calculate geometric means prior to estimate size factors
 gm_mean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
@@ -933,13 +1003,18 @@ res_Rain_0 = results(deseq_Rain_0)
 res_Rain_0 = res_Rain_0[order(res_Rain_0$padj, na.last=NA), ]
 alpha = 0.01
 sigtab_Rain_0 = res_Rain_0[(res_Rain_0$padj < alpha), ]
-sigtab_Rain_0 = cbind(as(sigtab_Rain_0, "data.frame"), as(tax_table(run_Rain_0_deseq_5)[rownames(sigtab_Rain_0), ], "matrix"))
+sigtab_Rain_0 = cbind(as(sigtab_Rain_0, "data.frame"), as(tax_table(run_R_CR0)[rownames(sigtab_Rain_0), ], "matrix"))
 head(sigtab_Rain_0)
+##### To write all OTUs that were significant different: positives and negatives
+sigtab_Rain_0 = sigtab_Rain_0[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
 
+write.csv(sigtab_Rain_0, 'DEseq_all_values_Rain_vs_CRd0.csv')
+###### RESULT: 292 TAXA differentially abundant ##############
+##### To subset positives values
 posigtab_Rain_0 = sigtab_Rain_0[sigtab_Rain_0[, "log2FoldChange"] > 0, ]
 posigtab_Rain_0 = posigtab_Rain_0[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
-
 write.csv(posigtab_Rain_0, 'Differential_abundance_Rain_vs_rain_tomato0.csv')
+###### RESULT: 148 TAXA differentially abundant ##############
 
 theme_set(theme_bw())
 sigtabgen_Rain_0 = subset(sigtab_Rain_0, !is.na(Genus))
@@ -967,11 +1042,12 @@ ggplot(sigtabgen_Rain_0, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
 
 
 ### Rain vs tomato treated with Filtered Rain day 0
-run_R_FR0 <- subset_samples(run, System%in%c("FR.d0","Atm.Rain"))
+run_Rain_FR0 <- subset_samples(run, System%in%c("FR.d0","Atm.Rain"))
+run_R_FR0 <- prune_taxa(taxa_sums(run_Rain_FR0) > 0, run_Rain_FR0)
 summary(sample_data(run_R_FR0)$System)
 print(run_R_FR0)
-######18 samples
-######30889 taxa
+###### 18 samples
+###### 16784 taxa
 sample_sums(run_R_FR0)
 
 run_R_FR0 <- prune_samples(sample_sums(run_R_FR0) > 500, run_R_FR0)
@@ -989,13 +1065,18 @@ res_Rain_FR0 = results(deseq_Rain_FR0)
 res_Rain_FR0 = res_Rain_FR0[order(res_Rain_FR0$padj, na.last=NA), ]
 alpha = 0.01
 sigtab_Rain_FR0 = res_Rain_FR0[(res_Rain_FR0$padj < alpha), ]
-sigtab_Rain_FR0 = cbind(as(sigtab_Rain_FR0, "data.frame"), as(tax_table(run_Rain_FR0_deseq_5)[rownames(sigtab_Rain_FR0), ], "matrix"))
+sigtab_Rain_FR0 = cbind(as(sigtab_Rain_FR0, "data.frame"), as(tax_table(run_R_FR0)[rownames(sigtab_Rain_FR0), ], "matrix"))
 head(sigtab_Rain_FR0)
+##### To write all OTUs that were significant different: positives and negatives
+sigtab_Rain_FR0 = sigtab_Rain_FR0[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
 
+write.csv(sigtab_Rain_FR0, 'DEseq_all_values_Rain_vs_FRd0.csv')
+###### RESULT: 472 TAXA differentially abundant ##############
+##### To subset positives values
 posigtab_Rain_FR0 = sigtab_Rain_FR0[sigtab_Rain_FR0[, "log2FoldChange"] > 0, ]
 posigtab_Rain_FR0 = posigtab_Rain_FR0[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
-
 write.csv(posigtab_Rain_FR0, 'Differential_abundance_Rain_vs_tomato_FR0.csv')
+###### RESULT: 178 TAXA differentially abundant ##############
 
 theme_set(theme_bw())
 sigtabgen_Rain_FR0 = subset(sigtab_Rain_FR0, !is.na(Genus))
@@ -1023,11 +1104,12 @@ ggplot(sigtabgen_Rain_FR0, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
 
 
 ### Rain vs Tomato treated with sterile Water day 0
-run_R_SW0 <- subset_samples(run, System%in%c("W.d0","Atm.Rain"))
+run_R_SWater0 <- subset_samples(run, System%in%c("W.d0","Atm.Rain"))
+run_R_SW0 <- prune_taxa(taxa_sums(run_R_SWater0) > 0, run_R_SWater0)
 summary(sample_data(run_R_SW0)$System)
 print(run_R_SW0)
-######18 samples
-######30889 taxa
+###### 16 samples
+###### 16333 taxa
 sample_sums(run_R_SW0)
 
 run_R_SW0 <- prune_samples(sample_sums(run_R_SW0) > 500, run_R_SW0)
@@ -1045,12 +1127,16 @@ res_Rain_W0 = results(deseq_Rain_W0)
 res_Rain_W0 = res_Rain_W0[order(res_Rain_W0$padj, na.last=NA), ]
 alpha = 0.01
 sigtab_Rain_W0 = res_Rain_W0[(res_Rain_W0$padj < alpha), ]
-sigtab_Rain_W0 = cbind(as(sigtab_Rain_W0, "data.frame"), as(tax_table(run_Rain_W0_deseq_5)[rownames(sigtab_Rain_W0), ], "matrix"))
+sigtab_Rain_W0 = cbind(as(sigtab_Rain_W0, "data.frame"), as(tax_table(run_R_SW0)[rownames(sigtab_Rain_W0), ], "matrix"))
 head(sigtab_Rain_W0)
-
+##### To write all OTUs that were significant different: positives and negatives
+sigtab_Rain_W0 = sigtab_Rain_W0[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
+write.csv(sigtab_Rain_W0, 'DEseq_all_values_Rain_vs_SWd0.csv')
+###### RESULT: 212 TAXA differentially abundant ##############
+##### To subset positives values
 posigtab_Rain_W0 = sigtab_Rain_W0[sigtab_Rain_W0[, "log2FoldChange"] > 0, ]
 posigtab_Rain_W0 = posigtab_Rain_W0[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
-
+###### RESULT: 77 TAXA differentially abundant ##############
 write.csv(posigtab_Rain_W0, 'Differential_abundance_Rain_vs_tomato_Water0.csv')
 
 theme_set(theme_bw())
@@ -1081,9 +1167,35 @@ ggplot(sigtabgen_Rain_W0, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
 #################################################################################################
 ###################### 3) TOMATO LEAF MICROBIOME GROWN ON GREENHOUSE SYSTEM #####################
 
+##### Number of OTUs #######
+RSF_Hydroponics <- subset_samples(run, System%in%c("Hydroponic"))
+RSF_H <- prune_taxa(taxa_sums(RSF_Hydroponics) > 0, RSF_Hydroponics)
+summary(sample_data(RSF_H)$System)
+print(RSF_H)  ###### 29 samples #### 13910 TAXA ######
+
+RSF_Organics <- subset_samples(run, System%in%c("Organic"))
+RSF_O <- prune_taxa(taxa_sums(RSF_Organics) > 0, RSF_Organics)
+summary(sample_data(RSF_O)$System)
+print(RSF_O)  ###### 18 Samples ####10157 TAXA ######
+
+RSF_OutRain <- subset_samples(run, System%in%c("Out.Rain"))
+RSF_OUTR <- prune_taxa(taxa_sums(RSF_OutRain) > 0, RSF_OutRain)
+summary(sample_data(RSF_OUTR)$System)
+print(RSF_OUTR)  ###### 7 samples #### 10190 TAXA ######
+
+RSF_OutNoRain <- subset_samples(run, System%in%c("Out.No.Rain"))
+RSF_OUTNR <- prune_taxa(taxa_sums(RSF_OutNoRain) > 0, RSF_OutNoRain)
+summary(sample_data(RSF_OUTNR)$System)
+print(RSF_OUTNR)  ###### 3 samples #### 7691 TAXA ######
+
 ## Subsample-Only Greenhouse and plants grown outside samples:
-run_RSF_Tomato <- subset_samples(run, System%in%c("Hydroponic","Organic","Out.No.Rain","Out.Rain"))
+run_RSF_TOM <- subset_samples(run, System%in%c("Hydroponic","Organic","Out.No.Rain","Out.Rain"))
+run_RSF_Tomato <- prune_taxa(taxa_sums(run_RSF_TOM) > 0, run_RSF_TOM)
 summary(sample_data(run_RSF_Tomato)$System)
+print(run_RSF_Tomato)
+###### 57 samples
+###### 23146 taxa
+sample_sums(run_RSF_Tomato)
 
 ################ Relative abundance 
 #### Phylum Relative abundance
@@ -1253,7 +1365,7 @@ calculate_rarefaction_curves <- function(psdata, measures, depths) {
 
 depth = 150000
 step = 1000
-rarefaction_curve_data <- calculate_rarefaction_curves(run, c('Observed'), rep(seq(1,depth,by=step), each = 10))
+rarefaction_curve_data <- calculate_rarefaction_curves(run_RSF_Tomato, c('Observed'), rep(seq(1,depth,by=step), each = 10))
 rarefaction_curve_data_summary <- ddply(rarefaction_curve_data, c('Depth', 'Sample', 'Measure'), summarise, Alpha_diversity_mean = mean(Alpha_diversity), Alpha_diversity_sd = sd(Alpha_diversity))
 rarefaction_curve_data_summary_verbose <- merge(rarefaction_curve_data_summary, data.frame(sample_data(run)), by.x = 'Sample', by.y = 'row.names')
 rarefaction_curve_data_summary_verbose$SampleID <- factor(rarefaction_curve_data_summary_verbose$SampleID,levels = map$SampleID)
@@ -1280,8 +1392,12 @@ ggplot( data = rarefaction_curve_data_summary_verbose,
 run_RSF_rarefied = rarefy_even_depth(run_RSF_Tomato, rngseed=1, sample.size=1*min(sample_sums(run_RSF_Tomato)), replace=F)
 
 sample_sums(run_RSF_Tomato)
+print(run_RSF_Tomato)
+####### 57 samples ###### 23146 taxa ########
 sample_sums(run_RSF_rarefied)
-########## Samples were rarefied to 2546 reads/ sample #################
+print(run_RSF_rarefied)
+####### 57 samples ###### 10525 taxa ########
+####### Samples were rarefied to 2546 reads/sample #####
 
 ####### Alpha diversity indices######
 plot_richness(run_RSF_rarefied,x="System",measures=c("Observed","Shannon","Simpson")) + 
@@ -1350,13 +1466,15 @@ adonis(bray_diss ~ sample_data(run_RSF_rarefied)$System)
 
 #################### Core Microbiome of phyllosphere on tomato grown in Greenhouse
 ######### Hydroponics tomato plants 
-RSF_rare_Hydro <- subset_samples(run_RSF_rarefied, System == "Hydroponic") 
+RSF_rare_HYD <- subset_samples(run_RSF_rarefied, System == "Hydroponic")
+RSF_rare_Hydro <- prune_taxa(taxa_sums(RSF_rare_HYD) > 0, RSF_rare_HYD)
 summary(sample_data(RSF_rare_Hydro)$System)
 print(RSF_rare_Hydro)
 sample_sums(RSF_rare_Hydro)
 ## RESULTS: 
-## Samples were rarefied to 2546 reads per sample
-## 10525 taxa OTU were identified
+###### 29 samples
+###### 7216 taxa
+###### Samples were rarefied to 2546 reads per sample
 
 ## keep only taxa with positive sums
 Hydro_rare.1 <- prune_taxa(taxa_sums(RSF_rare_Hydro) > 0, RSF_rare_Hydro)
@@ -1416,9 +1534,6 @@ Hydrotax2 <- dplyr::filter(Hydrotax, rownames(Hydrotax) %in% Hydrolist)
 
 ## Merge all the column into one except the Domain as all is bacteria in this case
 hydrotax.unit <- tidyr::unite(Hydrotax2, Taxa_level,c("Family", "Genus","OTU"), sep = "_;", remove = TRUE)
-
-### RESULT: 3 OTUs in the Core hydroponic microbiome
-
 hydrotax.unit$Taxa_level <- gsub(pattern="[a-z]__",replacement="", hydrotax.unit$Taxa_level)
 
 ## add this new information into the plot data df
@@ -1443,23 +1558,22 @@ plot(Hydrocore + theme(axis.text.x=element_text(size=12,angle=0,hjust =1),
 
 
 ######### Organics tomato plants 
-RSF_rare_Soil <- subset_samples(run_RSF_rarefied, System == "Organic") 
+RSF_rare_ORGA <- subset_samples(run_RSF_rarefied, System == "Organic") 
+RSF_rare_Soil <- prune_taxa(taxa_sums(RSF_rare_ORGA) > 0, RSF_rare_ORGA)
 summary(sample_data(RSF_rare_Soil)$System)
 print(RSF_rare_Soil)
 sample_sums(RSF_rare_Soil)
 ## RESULTS: 
-## Samples were rarefied to 2546 reads per sample
-## 10525 taxa OTU were identified
+###### 18 samples
+###### 3628 taxa
+###### Samples were rarefied to 2546 reads per sample
 
 ## keep only taxa with positive sums
 Soil_rare.1 <- prune_taxa(taxa_sums(RSF_rare_Soil) > 0, RSF_rare_Soil)
-
 ## Relative abundances
 Soil_rare.rel <- microbiome::transform(Soil_rare.1, "compositional")
-
 ## Relative population frequencies; at 1% compositional abundance threshold:
 head(prevalence(Soil_rare.rel, detection = 1, sort = TRUE))
-
 ## Phyloseq object of the core microbiota:
 Soil.core <- core(Soil_rare.rel, detection = 0, prevalence = .5)
 
@@ -1502,13 +1616,10 @@ Soiltax$OTU <- rownames(Soiltax)
 ## select taxonomy of only 
 ## those OTUs that are used in the plot
 Soiltax2 <- dplyr::filter(Soiltax, rownames(Soiltax) %in% Soillist) 
-
 ## Merge all the column into one except the Domain as all is bacteria in this case
 Soiltax.unit <- tidyr::unite(Soiltax2, Taxa_level,c("Family", "Genus","OTU"), sep = "_;", remove = TRUE)
-### RESULT: 3 OTUs in the Core hydroponic microbiome
 
 Soiltax.unit$Taxa_level <- gsub(pattern="[a-z]__",replacement="", Soiltax.unit$Taxa_level)
-
 ## add this new information into the plot data df
 Soildf$Taxa <- Soiltax.unit$Taxa_level
 ## Taxonomic information
@@ -1530,17 +1641,18 @@ plot(Soilcore + theme(axis.text.x=element_text(size=12,angle=0,hjust =1),
 
 
 ############### Tmato Plants exposed to Rain 
-RSF_rare_Out.Rain <- subset_samples(run_RSF_rarefied, System == "Out.Rain") 
+RSF_rare_OUT_R <- subset_samples(run_RSF_rarefied, System == "Out.Rain") 
+RSF_rare_Out.Rain <- prune_taxa(taxa_sums(RSF_rare_OUT_R) > 0, RSF_rare_OUT_R)
 summary(sample_data(RSF_rare_Out.Rain)$System)
 print(RSF_rare_Out.Rain)
 sample_sums(RSF_rare_Out.Rain)
 ## RESULTS: 
-## Samples were rarefied to 2546 reads per sample
-## 10525 taxa OTU were identified
+###### 7 samples
+###### 2422 taxa
+###### Samples were rarefied to 2546 reads per sample
 
 ## keep only taxa with positive sums
 Out.Rain_rare.1 <- prune_taxa(taxa_sums(RSF_rare_Out.Rain) > 0, RSF_rare_Out.Rain)
-
 ## Relative abundances
 Out.Rain_rare.rel <- microbiome::transform(Out.Rain_rare.1, "compositional")
 ## Relative population frequencies; at 1% compositional abundance threshold:
@@ -1557,7 +1669,6 @@ Out.Raintax.df <- as.data.frame(Out.Raintax.mat)
 
 ## add the OTus to last column
 Out.Raintax.df$OTU <- rownames(Out.Raintax.df)
-
 ## select taxonomy of only 
 ## those OTUs that are core members based on the thresholds that were used.
 Out.Rain_core.taxa.class <- dplyr::filter(Out.Raintax.df, rownames(Out.Raintax.df) %in% Out.Rain_core.taxa)
@@ -1591,10 +1702,7 @@ Out.Raintax2 <- dplyr::filter(Out.Raintax, rownames(Out.Raintax) %in% Out.Rainli
 
 ## Merge all the column into one except the Domain as all is bacteria in this case
 Out.Raintax.unit <- tidyr::unite(Out.Raintax2, Taxa_level,c("Family", "Genus","OTU"), sep = "_;", remove = TRUE)
-####### RESULT: 3 OTUs in the Core hydroponic microbiome
-
 Out.Raintax.unit$Taxa_level <- gsub(pattern="[a-z]__",replacement="", Out.Raintax.unit$Taxa_level)
-
 ## add this new information into the plot data df
 Out.Raindf$Taxa <- Out.Raintax.unit$Taxa_level
 ## Taxonomic information
@@ -1615,12 +1723,15 @@ plot(Out.Raincore + theme(axis.text.x=element_text(size=12,angle=0,hjust =1),
                     xlab("Detection threshold (Relative abundance %) "))
 
 ######### Tomato Plants NOT exposed to Rain 
-RSF_rare_Out.No.Rain <- subset_samples(run_RSF_rarefied, System == "Out.No.Rain") 
+RSF_rare_Out.NRain <- subset_samples(run_RSF_rarefied, System == "Out.No.Rain") 
+RSF_rare_Out.No.Rain <- prune_taxa(taxa_sums(RSF_rare_Out.NRain) > 0, RSF_rare_Out.NRain)
 summary(sample_data(RSF_rare_Out.No.Rain)$System)
 print(RSF_rare_Out.No.Rain)
 sample_sums(RSF_rare_Out.No.Rain)
-###### RESULTS: Samples were rarefied to 2546 reads per sample
-###### 10525 taxa OTU were identified
+## RESULTS: 
+###### 3 samples
+###### 1312 taxa
+###### Samples were rarefied to 2546 reads per sample
 
 ## keep only taxa with positive sums
 Out.No.Rain_rare.1 <- prune_taxa(taxa_sums(RSF_rare_Out.No.Rain) > 0, RSF_rare_Out.No.Rain)
@@ -1674,10 +1785,8 @@ Out.No.Raintax2 <- dplyr::filter(Out.No.Raintax, rownames(Out.No.Raintax) %in% O
 
 ## Merge all the column into one except the Domain as all is bacteria in this case
 Out.No.Raintax.unit <- tidyr::unite(Out.No.Raintax2, Taxa_level,c("Family", "Genus","OTU"), sep = "_;", remove = TRUE)
-######### RESULT: 3 OTUs in the Core hydroponic microbiome
 
 Out.No.Raintax.unit$Taxa_level <- gsub(pattern="[a-z]__",replacement="", Out.No.Raintax.unit$Taxa_level)
-
 ## add this new information into the plot data df
 Out.No.Raindf$Taxa <- Out.No.Raintax.unit$Taxa_level
 ## Taxonomic information
@@ -1699,13 +1808,15 @@ plot(Out.No.Raincore + theme(axis.text.x=element_text(size=12,angle=0,hjust =1),
 
 
 ######### Tomato Plants grown outside: 7 exposed to rain and 3 covered from rain
-RSF_rare_Outside <- subset_samples(run_RSF_rarefied, Time == "Outside") 
-summary(sample_data(RSF_rare_Outside)$Time)
+RSF_rare_OUT <- subset_samples(run_RSF_rarefied, Time == "Outside") 
+RSF_rare_Outside <- prune_taxa(taxa_sums(RSF_rare_OUT) > 0, RSF_rare_OUT)
+summary(sample_data(RSF_rare_Outside)$System)
 print(RSF_rare_Outside)
 sample_sums(RSF_rare_Outside)
 ## RESULTS: 
-## Samples were rarefied to 2546 reads per sample
-## 10525 taxa OTU were identified
+###### 10 samples
+###### 3249 taxa
+###### Samples were rarefied to 2546 reads per sample
 
 ## keep only taxa with positive sums
 RSF_rare_Outside.1 <- prune_taxa(taxa_sums(RSF_rare_Outside) > 0, RSF_rare_Outside)
@@ -1784,12 +1895,14 @@ plot(RSF_rare_Outsidecore + theme(axis.text.x=element_text(size=12,angle=0,hjust
 
 ######################### DIFERENTIAL ABUNDANCE ##########################################
 ######### Hydroponic vs Organic
-run_RSF_H_O <- subset_samples(run, System%in%c("Hydroponic","Organic"))
+run_RSF_HYDR_ORG <- subset_samples(run, System%in%c("Hydroponic","Organic"))
+run_RSF_H_O <- prune_taxa(taxa_sums(run_RSF_HYDR_ORG) > 0, run_RSF_HYDR_ORG)
 summary(sample_data(run_RSF_H_O)$System)
 print(run_RSF_H_O)
-######29Hydroponicsamples and 18Organicsamples
-######30889 taxa
 sample_sums(run_RSF_H_O)
+## RESULTS: 
+###### 47 samples
+###### 16386 taxa
 
 RSF_Hyd_Org <- prune_samples(sample_sums(run_RSF_H_O) > 500, run_RSF_H_O)
 head(sample_data(RSF_Hyd_Org)$System, 25)
@@ -1808,11 +1921,16 @@ alpha = 0.01
 sigtab_H_O = res_H_O[(res_H_O$padj < alpha), ]
 sigtab_H_O = cbind(as(sigtab_H_O, "data.frame"), as(tax_table(RSF_Hyd_Org)[rownames(sigtab_H_O), ], "matrix"))
 head(sigtab_H_O)
+##### To write all OTUs that were significant different: positives and negatives
+sigtab_H_O = sigtab_H_O[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
 
+write.csv(sigtab_H_O, 'DEseq_all_values_Hydro_vs_Soil.csv')
+###### RESULT: 76 TAXA differentially abundant ##############
+##### To subset positives values
 posigtab_H_O = sigtab_H_O[sigtab_H_O[, "log2FoldChange"] > 0, ]
 posigtab_H_O = posigtab_H_O[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
-
 write.csv(posigtab_H_O, 'Differential_abundance_Hydroponics vs Organics  .csv')
+###### RESULT: 62 TAXA differentially abundant ##############
 
 theme_set(theme_bw())
 sigtabgen_H_O = subset(sigtab_H_O, !is.na(Genus))
@@ -1836,16 +1954,18 @@ ggplot(sigtabgen_H_O, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
         legend.text = element_text(size=12)) +
   ylab("Genus \n") +
   xlab("Log2FoldChange") +
-  ggtitle("Differential abundance Hydroponic vs Organic")
+  ggtitle("DEseq Hydroponic vs Organic")
 
 
 ######### Hydroponics vs tomatoes exposed to rain
-run_RSF_H_R <- subset_samples(run, System%in%c("Hydroponic","Out.Rain"))
+run_RSF_HYDRO_RAIN <- subset_samples(run, System%in%c("Hydroponic","Out.Rain"))
+run_RSF_H_R <- prune_taxa(taxa_sums(run_RSF_HYDRO_RAIN) > 0, run_RSF_HYDRO_RAIN)
 summary(sample_data(run_RSF_H_R)$System)
 print(run_RSF_H_R)
-######29Hydroponicsamples and 7outside rain samples
-######30889 taxa
 sample_sums(run_RSF_H_R)
+## RESULTS: 
+###### 36 samples
+###### 19924 taxa
 
 run_RSF_H_R <- prune_samples(sample_sums(run_RSF_H_R) > 500, run_RSF_H_R)
 head(sample_data(run_RSF_H_R)$System, 25)
@@ -1864,11 +1984,15 @@ alpha = 0.01
 sigtab_H_OutR = res_H_OutR[(res_H_OutR$padj < alpha), ]
 sigtab_H_OutR = cbind(as(sigtab_H_OutR, "data.frame"), as(tax_table(run_RSF_H_R)[rownames(sigtab_H_OutR), ], "matrix"))
 head(sigtab_H_OutR)
-
+##### To write all OTUs that were significant different: positives and negatives
+sigtab_H_OutR = sigtab_H_OutR[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
+write.csv(sigtab_H_OutR, 'DEseq_all_values_Hydro_vs_OutRain.csv')
+###### RESULT: 80 TAXA differentially abundant ##############
+##### To subset positives values
 posigtab_H_OutR = sigtab_H_OutR[sigtab_H_OutR[, "log2FoldChange"] > 0, ]
 posigtab_H_OutR = posigtab_H_OutR[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
-
 write.csv(posigtab_H_OutR, 'Differential_abundance_Hydroponics vs_tomato_outsideRain.csv')
+###### RESULT: 40 TAXA differentially abundant ##############
 
 theme_set(theme_bw())
 sigtabgen_H_OutR = subset(sigtab_H_OutR, !is.na(Genus))
@@ -1892,16 +2016,18 @@ ggplot(sigtabgen_H_OutR, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
         legend.text = element_text(size=12)) +
   ylab("Genus \n") +
   xlab("Log2FoldChange") +
-  ggtitle("Differential abundance Hydroponic vs Outside_Rain")
+  ggtitle("DEseq Hydroponic vs Outside_Rain")
 
 
 ######### Organics vs tomatoes exposed to rain
-run_RSF_O_R <- subset_samples(run, System%in%c("Organic","Out.Rain"))
+run_RSF_ORG_RAIN <- subset_samples(run, System%in%c("Organic","Out.Rain"))
+run_RSF_O_R <- prune_taxa(taxa_sums(run_RSF_ORG_RAIN) > 0, run_RSF_ORG_RAIN)
 summary(sample_data(run_RSF_O_R)$System)
 print(run_RSF_O_R)
-######18organicsamples and 7outsiderain samples
-######30889 taxa
 sample_sums(run_RSF_O_R)
+## RESULTS: 
+###### 25 samples
+###### 17305 taxa
 
 run_RSF_O_R <- prune_samples(sample_sums(run_RSF_O_R) > 500, run_RSF_O_R)
 head(sample_data(run_RSF_O_R)$System, 25)
@@ -1920,11 +2046,15 @@ alpha = 0.01
 sigtab_O_OutR = res_O_OutR[(res_O_OutR$padj < alpha), ]
 sigtab_O_OutR = cbind(as(sigtab_O_OutR, "data.frame"), as(tax_table(run_RSF_O_R)[rownames(sigtab_O_OutR), ], "matrix"))
 head(sigtab_O_OutR)
-
+##### To write all OTUs that were significant different: positives and negatives
+sigtab_O_OutR = sigtab_O_OutR[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
+write.csv(sigtab_O_OutR, 'DEseq_all_values_Org_vs_OutRain.csv')
+###### RESULT: 159 TAXA differentially abundant ##############
+##### To subset positives values
 posigtab_O_OutR = sigtab_O_OutR[sigtab_O_OutR[, "log2FoldChange"] > 0, ]
 posigtab_O_OutR = posigtab_O_OutR[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
-
 write.csv(posigtab_O_OutR, 'Differential_abundance_Organics vs_tomato_outsideRain.csv')
+###### RESULT: 58 TAXA differentially abundant ##############
 
 theme_set(theme_bw())
 sigtabgen_O_OutR = subset(sigtab_O_OutR, !is.na(Genus))
@@ -1948,17 +2078,19 @@ ggplot(sigtabgen_O_OutR, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
         legend.text = element_text(size=12)) +
   ylab("Genus \n") +
   xlab("Log2FoldChange") +
-  ggtitle("Differential abundance Organic vs Outside_Rain")
+  ggtitle("DEseq Organic vs Outside_Rain")
 
 
 
 ######### Hydroponics vs tomatoes outside  not exposed to rain
-run_RSF_H_NR <- subset_samples(run, System%in%c("Hydroponic","Out.Rain"))
+run_RSF_Hydro_NR <- subset_samples(run, System%in%c("Hydroponic","Out.No.Rain"))
+run_RSF_H_NR <- prune_taxa(taxa_sums(run_RSF_Hydro_NR) > 0, run_RSF_Hydro_NR)
 summary(sample_data(run_RSF_H_NR)$System)
 print(run_RSF_H_NR)
-######29Hydroponicsamples and 3outside norain samples
-######30889 taxa
 sample_sums(run_RSF_H_NR)
+## RESULTS: 
+###### 32 samples
+###### 17625 taxa
 
 run_RSF_H_NR <- prune_samples(sample_sums(run_RSF_H_NR) > 500, run_RSF_H_NR)
 head(sample_data(run_RSF_H_NR)$System, 25)
@@ -1977,11 +2109,15 @@ alpha = 0.01
 sigtab_H_OutNR = res_H_OutNR[(res_H_OutNR$padj < alpha), ]
 sigtab_H_OutNR = cbind(as(sigtab_H_OutNR, "data.frame"), as(tax_table(run_RSF_H_NR)[rownames(sigtab_H_OutNR), ], "matrix"))
 head(sigtab_H_OutNR)
-
+##### To write all OTUs that were significant different: positives and negatives
+sigtab_H_OutNR = sigtab_H_OutNR[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
+write.csv(sigtab_H_OutNR, 'DEseq_all_values_Hydro_vs_OutNORain.csv')
+###### RESULT: 21 TAXA differentially abundant ##############
+##### To subset positives values
 posigtab_H_OutNR = sigtab_H_OutNR[sigtab_H_OutNR[, "log2FoldChange"] > 0, ]
 posigtab_H_OutNR = posigtab_H_OutNR[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
-
 write.csv(posigtab_H_OutNR, 'Differential_abundance_Hydroponics vs_tomato_outsideNoRain.csv')
+###### RESULT: 14 TAXA differentially abundant ##############
 
 theme_set(theme_bw())
 sigtabgen_H_OutNR = subset(sigtab_H_OutNR, !is.na(Genus))
@@ -2005,16 +2141,18 @@ ggplot(sigtabgen_H_OutNR, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
         legend.text = element_text(size=12)) +
   ylab("Genus \n") +
   xlab("Log2FoldChange") +
-  ggtitle("Differential abundance Hydroponic vs Outside_No_Rain")
+  ggtitle("DEseq Hydroponic vs Outside_No_Rain")
 
 
 ######### Organics vs tomatoes not exposed to rain
-run_RSF_O_NR <- subset_samples(run, System%in%c("Organic","Out.No.Rain"))
+run_RSF_Org_NR <- subset_samples(run, System%in%c("Organic","Out.No.Rain"))
+run_RSF_O_NR <- prune_taxa(taxa_sums(run_RSF_Org_NR) > 0, run_RSF_Org_NR)
 summary(sample_data(run_RSF_O_NR)$System)
 print(run_RSF_O_NR)
-######18organicsamples and 7outsiderain samples
-######30889 taxa
 sample_sums(run_RSF_O_NR)
+## RESULTS: 
+###### 21 samples
+###### 15111 taxa
 
 run_RSF_O_NR <- prune_samples(sample_sums(run_RSF_O_NR) > 500, run_RSF_O_NR)
 head(sample_data(run_RSF_O_NR)$System, 25)
@@ -2033,11 +2171,15 @@ alpha = 0.01
 sigtab_O_OutNR = res_O_OutNR[(res_O_OutNR$padj < alpha), ]
 sigtab_O_OutNR = cbind(as(sigtab_O_OutNR, "data.frame"), as(tax_table(run_RSF_O_NR)[rownames(sigtab_O_OutNR), ], "matrix"))
 head(sigtab_O_OutNR)
-
+##### To write all OTUs that were significant different: positives and negatives
+sigtab_O_OutNR = sigtab_O_OutNR[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
+write.csv(sigtab_O_OutNR, 'DEseq_all_values_Org_vs_OutNORain.csv')
+###### RESULT: 91 TAXA differentially abundant ##############
+##### To subset positives values
 posigtab_O_OutNR = sigtab_O_OutNR[sigtab_O_OutNR[, "log2FoldChange"] > 0, ]
 posigtab_O_OutNR = posigtab_O_OutNR[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
-
 write.csv(posigtab_O_OutNR, 'Differential_abundance_Organics vs_tomato_outsideNoRain.csv')
+###### RESULT: 49 TAXA differentially abundant ##############
 
 theme_set(theme_bw())
 sigtabgen_O_OutNR = subset(sigtab_O_OutNR, !is.na(Genus))
@@ -2061,16 +2203,18 @@ ggplot(sigtabgen_O_OutNR, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
         legend.text = element_text(size=12)) +
   ylab("Genus \n") +
   xlab("Log2FoldChange") +
-  ggtitle("Differential abundance Organic vs Outside_No_Rain")
+  ggtitle("DEseq Organic vs Outside_No_Rain")
 
 
 ######### Hydroponics vs tomatoes outside
-run_RSF_H_Out <- subset_samples(run, Source%in%c("Hydroponic","Outside"))
-summary(sample_data(run_RSF_H_Out)$Source)
+run_RSF_Hydro_Outside <- subset_samples(run, Source%in%c("Hydroponic","Outside"))
+run_RSF_H_Out <- prune_taxa(taxa_sums(run_RSF_Hydro_Outside) > 0, run_RSF_Hydro_Outside)
+summary(sample_data(run_RSF_H_Out)$System)
 print(run_RSF_H_Out)
-######29Hydroponicsamples and 3outside norain samples
-######30889 taxa
 sample_sums(run_RSF_H_Out)
+## RESULTS: 
+###### 39 samples
+###### 21245 taxa
 
 run_RSF_H_Out <- prune_samples(sample_sums(run_RSF_H_Out) > 500, run_RSF_H_Out)
 head(sample_data(run_RSF_H_Out)$Source, 25)
@@ -2090,11 +2234,15 @@ alpha = 0.01
 sigtab_H_Out = res_H_Out[(res_H_Out$padj < alpha), ]
 sigtab_H_Out = cbind(as(sigtab_H_Out, "data.frame"), as(tax_table(run_RSF_H_Out)[rownames(sigtab_H_Out), ], "matrix"))
 head(sigtab_H_Out)
-
+##### To write all OTUs that were significant different: positives and negatives
+sigtab_H_Out = sigtab_H_Out[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
+write.csv(sigtab_H_Out, 'DEseq_all_values_Hydro_vs_Outside.csv')
+###### RESULT: 179 TAXA differentially abundant ##############
+##### To subset positives values
 posigtab_H_Out = sigtab_H_Out[sigtab_H_Out[, "log2FoldChange"] > 0, ]
 posigtab_H_Out = posigtab_H_Out[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
-
 write.csv(posigtab_H_Out, 'Differential_abundance_Hydroponics vs outside.csv')
+###### RESULT: 116 TAXA differentially abundant ##############
 
 theme_set(theme_bw())
 sigtabgen_H_Out = subset(sigtab_H_Out, !is.na(Genus))
@@ -2118,17 +2266,18 @@ ggplot(sigtabgen_H_Out, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
         legend.text = element_text(size=12)) +
   ylab("Genus \n") +
   xlab("Log2FoldChange") +
-  ggtitle("Differential abundance Hydroponic vs Outside")
-
+  ggtitle("DEseq Hydroponic vs Outside")
 
 
 ######### Organics vs tomatoes outside
-run_RSF_O_Out <- subset_samples(run, Source%in%c("Organic","Outside"))
-summary(sample_data(run_RSF_O_Out)$Source)
+run_RSF_Org_Outside <- subset_samples(run, Source%in%c("Organic","Outside"))
+run_RSF_O_Out <- prune_taxa(taxa_sums(run_RSF_Org_Outside) > 0, run_RSF_Org_Outside)
+summary(sample_data(run_RSF_O_Out)$System)
 print(run_RSF_O_Out)
-######29Hydroponicsamples and 3outside norain samples
-######30889 taxa
 sample_sums(run_RSF_O_Out)
+## RESULTS: 
+###### 28 samples
+###### 19195 taxa
 
 run_RSF_O_Out <- prune_samples(sample_sums(run_RSF_O_Out) > 500, run_RSF_O_Out)
 head(sample_data(run_RSF_O_Out)$System, 25)
@@ -2148,13 +2297,16 @@ alpha = 0.01
 sigtab_O_Out = res_O_Out[(res_O_Out$padj < alpha), ]
 sigtab_O_Out = cbind(as(sigtab_O_Out, "data.frame"), as(tax_table(run_RSF_O_Out)[rownames(sigtab_O_Out), ], "matrix"))
 head(sigtab_O_Out)
-
+##### To write all OTUs that were significant different: positives and negatives
+sigtab_O_Out = sigtab_O_Out[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
+write.csv(sigtab_O_Out, 'DEseq_all_values_Org_vs_Outside.csv')
+###### RESULT: 255 TAXA differentially abundant ##############
+##### To subset positives values
 posigtab_O_Out = sigtab_O_Out[sigtab_O_Out[, "log2FoldChange"] > 0, ]
 posigtab_O_Out = posigtab_O_Out[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
-
 write.csv(posigtab_O_Out, 'Differential_abundance_Organics vs outside.csv')
+###### RESULT: 129 TAXA differentially abundant ##############
 
-library("ggplot2")
 theme_set(theme_bw())
 sigtabgen_O_Out = subset(sigtab_O_Out, !is.na(Genus))
 # Phylum order
@@ -2177,4 +2329,4 @@ ggplot(sigtabgen_O_Out, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
         legend.text = element_text(size=12)) +
   ylab("Genus \n") +
   xlab("Log2FoldChange") +
-  ggtitle("Differential abundance Organic vs Outside")
+  ggtitle("DEseq Organic vs Outside")
