@@ -191,18 +191,23 @@ ggplot( data = rarefaction_curve_data_summary_verbose,
         mapping = aes( x = Depth, y = Alpha_diversity_mean,
                        ymin = Alpha_diversity_mean - Alpha_diversity_sd,
                        ymax = Alpha_diversity_mean + Alpha_diversity_sd,
-                       colour = Description,
+                       colour = SampleID,
                        group = SampleID)
 ) +
   scale_fill_manual(values=col_vector) +
   geom_line( ) +
   geom_point(size=0.5 ) +
   guides(fill=guide_legend(title="Sample")) +
+  theme(legend.text = element_text(size=14)) +
+  theme(axis.text.x=element_text(size=12),
+        axis.text.y = element_text(size = 12),
+        strip.text.x = element_text(size=16, face = "bold"), 
+        strip.text.y = element_text(size=16, face = 'bold'),
+        plot.title = element_text(size = rel(2)),
+        axis.title=element_text(size=16,face="bold", vjust = 10))+
   xlab("Sequences per sample") +
-  ylab("Observed OTU") +
-  theme(legend.text = element_text(size=10)) +
-  ggtitle("Rarefaction Curves")+
-  theme(plot.title = element_text(size = rel(2)))
+  ylab("Observed OTU")+
+  ggtitle("Rarefaction Curves Rain Samples")
 
 
 ################ The Core Rain Microbiome
@@ -536,12 +541,16 @@ ggplot( data = rarefaction_curve_data_summary_verbose,
   geom_line( ) +
   geom_point(size=0.5 ) +
   guides(fill=guide_legend(title="Sample")) +
+  theme(legend.text = element_text(size=14)) +
+  theme(axis.text.x=element_text(size=12),
+        axis.text.y = element_text(size = 12),
+        strip.text.x = element_text(size=16, face = "bold"), 
+        strip.text.y = element_text(size=16, face = 'bold'),
+        plot.title = element_text(size = rel(2)),
+        axis.title=element_text(size=16,face="bold", vjust = 10))+
   xlab("Sequences per sample") +
-  ylab("Observed OTU") +
-  theme(legend.text = element_text(size=10)) +
-  ggtitle("Rarefaction Curves")+
-  theme(plot.title = element_text(size = rel(2)))
-
+  ylab("Observed OTU")+
+  ggtitle("Rarefaction Curves Rain-Tomato")
 
 ############# ALPHA DIVERSITY INDICES 
 ##### Rarefaction  
@@ -1370,7 +1379,7 @@ rarefaction_curve_data_summary <- ddply(rarefaction_curve_data, c('Depth', 'Samp
 rarefaction_curve_data_summary_verbose <- merge(rarefaction_curve_data_summary, data.frame(sample_data(run)), by.x = 'Sample', by.y = 'row.names')
 rarefaction_curve_data_summary_verbose$SampleID <- factor(rarefaction_curve_data_summary_verbose$SampleID,levels = map$SampleID)
 n <- dim(rarefaction_curve_data_summary_verbose)[1]
-library(RColorBrewer)
+
 qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
 col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
 ggplot( data = rarefaction_curve_data_summary_verbose,
@@ -1384,9 +1393,16 @@ ggplot( data = rarefaction_curve_data_summary_verbose,
   geom_line( ) +
   geom_point(size=0.5 ) +
   guides(fill=guide_legend(title="Sample")) +
-  theme(legend.text = element_text(size=5)) +
+  theme(legend.text = element_text(size=14)) +
+  theme(axis.text.x=element_text(size=12),
+        axis.text.y = element_text(size = 12),
+        strip.text.x = element_text(size=16, face = "bold"), 
+        strip.text.y = element_text(size=16, face = 'bold'),
+        plot.title = element_text(size = rel(2)),
+        axis.title=element_text(size=16,face="bold", vjust = 10))+
   xlab("Sequences per sample") +
-  ylab("Observed OTU")
+  ylab("Observed OTU")+
+  ggtitle("Rarefaction Curves RSF-Outside")
 
 ########## Rarefaction for Diversity analysis
 run_RSF_rarefied = rarefy_even_depth(run_RSF_Tomato, rngseed=1, sample.size=1*min(sample_sums(run_RSF_Tomato)), replace=F)
