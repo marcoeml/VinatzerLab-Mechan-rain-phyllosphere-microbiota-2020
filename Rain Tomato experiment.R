@@ -3,7 +3,7 @@
 ## Vinatzer Laboratory at Virginia Tech
 
 ## Set working directory
-setwd("~/Desktop/Rain_tomato paper")
+setwd("~/Desktop/Rain_Paper_Dec2020/")
 
 ##Instal libraries
 source('http://bioconductor.org/biocLite.R')
@@ -21,7 +21,7 @@ library("vegan")
 library("DESeq2")
 
 ## Load Mapping file and OTU biom file from QIIME
-map <- import_qiime_sample_data("Map_Merged_RSF_Rain_Tomato.txt") 
+map <- import_qiime_sample_data("Map_Merged_RSF_Rain_Tomato2.txt") 
 Sys.setlocale('LC_ALL','C')
 otu <- import_biom(BIOMfilename = "filtered_otu_table.biom","rep_set.tre") 
 
@@ -30,7 +30,6 @@ run <- merge_phyloseq(otu,map) # Use the official taxonomic ranks names
 ## Use the official taxonomic ranks names 
 colnames(tax_table(run)) <- c("Kingdom", "Phylum", "Class",
                                    "Order", "Family", "Genus","Species")
-
 
 ######## Here, we analyze several set of samples: 1) Rain samples (Rain microbiome), 2) Rain as ######## bacterial inoculum (Rain as source of the phyllosphere microbiome), 3) tomato plants never ######## exposed to rain(Greenhouse)
 
@@ -42,22 +41,28 @@ run_rain <- subset_samples(run, Source%in%c("Rain"))
 run_rain1 <- prune_taxa(taxa_sums(run_rain) > 0, run_rain)
 summary(sample_data(run_rain1)$Source)
 print(run_rain1)
+sample_sums(run_rain1)
 ###### 10 Samples ########
 ###### 13104 taxa ########
-write.csv(otu_table(run_rain1), 'run_rain_OTU_table.csv')
-sample_sums(run_rain1)
+
+#rarefy rain samples
+run_rain1_rare = rarefy_even_depth(run_rain1, rngseed = 1, sample.size = 0.9*min(sample_sums(run_rain1)), replace = F)
+write.csv(otu_table(run_rain1_rare), 'run_rain_OTU_table.csv')
+sample_sums(run_rain1_rare)
+print(run_rain1_rare)
+###Samples are rarefied to 6419 read/sample
 
 ########### Relative abundance of the Rain Microbiome
 
 ## Phylum relative abundance
-run_phylum_rain <- run_rain1 %>%
+run_phylum_rain <- run_rain1_rare %>%
   tax_glom(taxrank = "Phylum") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
-  filter(Abundance > 0.01) %>%
+  #filter(Abundance > 0.01) %>%
   arrange(Phylum)
 
-write.csv(run_phylum_rain, 'run_phylum_rain_abun01.csv')
+write.csv(run_phylum_rain, 'run_phylum_rain_abun.csv')
 
 n <- dim(run_phylum_rain)[1]
 qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
@@ -69,9 +74,9 @@ ggplot(run_phylum_rain,aes(x=Time,y=Abundance,fill=Phylum)) +
   geom_bar(position="fill",stat="identity") + 
   scale_fill_manual(values = col_vector) + 
   guides(fill=guide_legend(reverse=T,keywidth = 1,keyheight = 1)) + 
-  ylab("Relative Abundance (Phylum > 1%) \n") +
+  ylab("Relative Abundance (Phylum) \n") +
   xlab("Rain Colection") +
-  theme(axis.text.x=element_text(size=16,angle=0,hjust =0.5),
+  theme(axis.text.x=element_text(size=16,angle=90,hjust =0.5),
         axis.text.y = element_text(size = 14),
         strip.text.x = element_text(size=18,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=18, face = 'bold'),
@@ -86,7 +91,7 @@ ggplot(run_phylum_rain,aes(x=Time,y=Abundance,fill=Phylum)) +
 
 
 ##Class relative abundance
-run_class_rain <- run_rain1 %>%
+run_class_rain <- run_rain1_rare %>%
   tax_glom(taxrank = "Class") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
@@ -108,7 +113,7 @@ ggplot(run_class_rain,aes(x=Time,y=Abundance,fill=Class)) +
   guides(fill=guide_legend(reverse=T,keywidth = 1,keyheight = 1)) + 
   ylab("Relative Abundance (Class > 1%) \n") +
   xlab("Rain Colection") +
-  theme(axis.text.x=element_text(size=16,angle=0,hjust =0.5),
+  theme(axis.text.x=element_text(size=16,angle=90,hjust =0.5),
         axis.text.y = element_text(size = 14),
         strip.text.x = element_text(size=18,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=18, face = 'bold'),
@@ -121,12 +126,49 @@ ggplot(run_class_rain,aes(x=Time,y=Abundance,fill=Class)) +
   ggtitle("Class Composition")+
   scale_y_continuous(labels=percent_format(),expand=c(0,0))
 
+
+##Family relative abundance
+run_family_rain <- run_rain1_rare %>%
+  tax_glom(taxrank = "Family") %>%
+  transform_sample_counts(function(x){x/sum(x)}) %>%
+  psmelt() %>%
+  filter(Abundance > 0.02) %>%
+  arrange(Family)
+
+write.csv(run_family_rain, 'run_family_rain_abun02.csv')
+
+library(RColorBrewer)
+n <- dim(run_family_rain)[1]
+qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
+col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+
+run_family_rain$Family <- factor(run_family_rain$Family, levels = rev(levels(run_family_rain$Family)))
+run_family_rain$Time <- factor(run_family_rain$Time,levels = c("Apr15","Aug15","Mar16","Apr16","May16","Jul16","Oct16","Dec16","Jun19" ))
+ggplot(run_family_rain,aes(x=Time,y=Abundance,fill=Family)) +
+  geom_bar(position="fill",stat="identity") + 
+  scale_fill_manual(values = col_vector) + 
+  guides(fill=guide_legend(reverse=T,keywidth = 1,keyheight = 1)) + 
+  ylab("Relative Abundance (Family) > 2%) \n") +
+  xlab("Rain Colection") +
+  theme(axis.text.x=element_text(size=14,angle=90,hjust =0.5),
+        axis.text.y = element_text(size = 14),
+        strip.text.x = element_text(size=18,colour = "black", face = "bold"), 
+        strip.text.y = element_text(size=18, face = 'bold'),
+        plot.title = element_text(size = rel(2)),
+        axis.title=element_text(size=18,face="bold", vjust = 10),
+        legend.text = element_text(size=11),
+        plot.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  ggtitle("Family Composition")+
+  scale_y_continuous(labels=percent_format(),expand=c(0,0))
+
 ##Genus relative abundance
-run_genus_rain <- run_rain1 %>%
+run_genus_rain <- run_rain1_rare %>%
   tax_glom(taxrank = "Genus") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
-  filter(Abundance > 0.001) %>%
+  filter(Abundance > 0.02) %>%
   arrange(Genus)
 
 write.csv(run_genus_rain, 'run_genus_rain_abun001.csv')
@@ -144,13 +186,13 @@ ggplot(run_genus_rain,aes(x=Time,y=Abundance,fill=Genus)) +
   guides(fill=guide_legend(reverse=T,keywidth = 1,keyheight = 1)) + 
   ylab("Relative Abundance (Genus) > 2%) \n") +
   xlab("Rain Colection") +
-  theme(axis.text.x=element_text(size=14,angle=0,hjust =0.5),
+  theme(axis.text.x=element_text(size=14,angle=90,hjust =0.5),
         axis.text.y = element_text(size = 14),
         strip.text.x = element_text(size=18,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=18, face = 'bold'),
         plot.title = element_text(size = rel(2)),
         axis.title=element_text(size=18,face="bold", vjust = 10),
-        legend.text = element_text(size=11),
+        legend.text = element_text(size=8),
         plot.background = element_blank(),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()) +
@@ -211,26 +253,16 @@ ggplot( data = rarefaction_curve_data_summary_verbose,
 
 
 ################ The Core Rain Microbiome
-
-## Rarefaction to calculate core microbiome
-run_rain.rarefied = rarefy_even_depth(run_rain1, rngseed=1, sample.size=1*min(sample_sums(run_rain1)), replace=F)
-sample_sums(run_rain1)
-sample_sums(run_rain.rarefied)
-  ## RESULTS: 
-    ## Samples were rarefied to 7133 reads per sample
-    ## 6325 taxa OTU were identified
-
-
 ## Check the data 
-print(run_rain.rarefied) 
+print(run_rain1_rare) 
 ## keep only taxa with positive sums
-rain_rare.1 <- prune_taxa(taxa_sums(run_rain.rarefied) > 0, run_rain.rarefied)
+rain_rare.1 <- prune_taxa(taxa_sums(run_rain1_rare) > 0, run_rain1_rare)
 
 ## Relative abundances
 rain_rare.rel <- microbiome::transform(rain_rare.1, "compositional")
 
 ## Relative population frequencies; at 1% compositional abundance threshold:
-head(prevalence(rain_rare.rel, detection = 1, sort = TRUE))
+head(prevalence(rain_rare.rel, detection = 1/100, sort = TRUE))
 
 #Phyloseq object of the core microbiota:
 rain.core <- core(rain_rare.rel, detection = 0, prevalence = .5)
@@ -306,64 +338,46 @@ plot(Raincore + theme(axis.text.x=element_text(size=12,angle=0,hjust =1),
 ###############################################################################################
 ###################### 2) RAIN AS A SOURCE OF THE PHYLLOSPHERE MICROBIOME #####################
 
-######## Number of OTUs ########
-OTU_CR_day0 <- subset_samples(run, System%in%c("CR.d0"))
-OTU_CR_d0 <- prune_taxa(taxa_sums(OTU_CR_day0) > 0, OTU_CR_day0)
-summary(sample_data(OTU_CR_d0)$System)
-print(OTU_CR_d0) ######### 8 samples #### 7994 TAXA ########
-
-OTU_CR_day7 <- subset_samples(run, System%in%c("CR.d7"))
-OTU_CR_d7 <- prune_taxa(taxa_sums(OTU_CR_day7) > 0, OTU_CR_day7)
-summary(sample_data(OTU_CR_d7)$System)
-print(OTU_CR_d7) ######### 9 samples #### 10672 TAXA ########
-
-OTU_FR_day0 <- subset_samples(run, System%in%c("FR.d0"))
-OTU_FR_d0 <- prune_taxa(taxa_sums(OTU_FR_day0) > 0, OTU_FR_day0)
-summary(sample_data(OTU_FR_d0)$System)
-print(OTU_FR_d0) ######### 8 samples #### 6644 TAXA ########
-
-OTU_FR_day7 <- subset_samples(run, System%in%c("FR.d7"))
-OTU_FR_d7 <- prune_taxa(taxa_sums(OTU_FR_day7) > 0, OTU_FR_day7)
-summary(sample_data(OTU_FR_d7)$System)
-print(OTU_FR_d7) ######### 8 samples #### 8982 TAXA ########
-
-OTU_W_day0 <- subset_samples(run, System%in%c("W.d0"))
-OTU_W_d0 <- prune_taxa(taxa_sums(OTU_W_day0) > 0, OTU_W_day0)
-summary(sample_data(OTU_W_d0)$System)
-print(OTU_W_d0) ######### 6 samples #### 5827 TAXA ########
-
-OTU_W_day7 <- subset_samples(run, System%in%c("W.d7"))
-OTU_W_d7 <- prune_taxa(taxa_sums(OTU_W_day7) > 0, OTU_W_day7)
-summary(sample_data(OTU_W_d7)$System)
-print(OTU_W_d7) ######### 6 samples #### 7882 TAXA ########
-
-
-##### Genus relative abundance rain and Tomato samples
+##### Subsample lab inoculated samples
 run_R_T <- subset_samples(run, Source%in%c("Rain","Concentrated.Rain","Filtered.Rain","Sterile.Water"))
 run.r.t <- prune_taxa(taxa_sums(run_R_T) > 0, run_R_T)
 summary(sample_data(run.r.t)$Source)
 print(run.r.t)
-run_genus_rain_Tomato <- run.r.t %>%
+#rarefy samples
+RainTom_rare = rarefy_even_depth(run.r.t, rngseed = 1, sample.size = 0.9*min(sample_sums(run.r.t)), replace = F)
+write.csv(otu_table(RainTom_rare), 'Rain_Tomate_OTU_table.csv')
+sample_sums(RainTom_rare)
+print(RainTom_rare)
+
+run_genus_rain_Tomato <- RainTom_rare %>%
   tax_glom(taxrank = "Genus") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
-  filter(Abundance > 0.01) %>%
+  filter(Abundance > 0.001) %>%
   arrange(Genus)
-write.csv(run_genus_rain_Tomato, 'run_genus_rain_Tomato_abun001.csv')
+write.csv(run_genus_rain_Tomato, 'run_genus_rain_Tomato_abun001_2021.csv')
 
 
-## Subsample-Only laboratory innoculated tomato plants with rain samples:
+## Subsample-Only laboratory innoculated tomato samples:
 run_rain_Tom <- subset_samples(run, Source%in%c("Concentrated.Rain","Filtered.Rain","Sterile.Water"))
 run_rain_Tom1 <- prune_taxa(taxa_sums(run_rain_Tom) > 0, run_rain_Tom)
 summary(sample_data(run_rain_Tom1)$Source)
 print(run_rain_Tom1)
-###### 13104 taxa ########
+###### 45 samples #######
+###### 16653 taxa ########
 write.csv(otu_table(run_rain_Tom1), 'run_Rain_Tomato_OTU_table.csv')
 sample_sums(run_rain_Tom1)
 
+RainT_rare = rarefy_even_depth(run_rain_Tom1, rngseed = 1, sample.size = 0.9*min(sample_sums(run_rain_Tom1)), replace = F)
+sample_sums(RainT_rare)
+print(RainT_rare)
+### rarefied to 6670 reads per sample ###
+### 9923 taxa ###
+### 45 samples ###
+
 ################### Relative abundance 
 ## Phylum relative abundance
-run_phylum_rain_Tomato <- run_rain_Tom1 %>%
+run_phylum_rain_Tomato <- RainT_rare %>%
   tax_glom(taxrank = "Phylum") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
@@ -400,7 +414,7 @@ ggplot(run_phylum_rain_Tomato,aes(x=Description,y=Abundance,fill=Phylum)) +
 
 
 ##Class relative abundance
-run_class_rain_Tomato <- run_rain_Tom1 %>%
+run_class_rain_Tomato <- RainT_rare %>%
   tax_glom(taxrank = "Class") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
@@ -437,14 +451,14 @@ ggplot(run_class_rain_Tomato,aes(x=Description,y=Abundance,fill=Class)) +
 
 
 ## Family relative abundance
-run_family_rain_Tomato <- run_rain_Tom1 %>%
+run_family_rain_Tomato <- RainT_rare %>%
   tax_glom(taxrank = "Family") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
   filter(Abundance > 0.03) %>%
   arrange(Family)
 
-write.csv(run_family_rain_Tomato, 'run_family_rain_Tomato_abun01.csv')
+write.csv(run_family_rain_Tomato, 'run_family_rain_Tomato_abun02.csv')
 
 library(RColorBrewer)
 n <- dim(run_family_rain_Tomato)[1]
@@ -457,7 +471,7 @@ ggplot(run_family_rain_Tomato,aes(x=Description,y=Abundance,fill=Family)) +
   geom_bar(position="fill",stat="identity") + 
   scale_fill_manual(values = col_vector) + 
   guides(fill=guide_legend(reverse=T,keywidth = 1,keyheight = 1)) + 
-  ylab("Relative Abundance (Family > 3%) \n") +
+  ylab("Relative Abundance (Family > 2%) \n") +
   xlab("Rain Treatment") +
   theme(axis.text.x=element_text(size=12,angle=90,hjust =1),
         axis.text.y = element_text(size = 14),
@@ -474,14 +488,14 @@ ggplot(run_family_rain_Tomato,aes(x=Description,y=Abundance,fill=Family)) +
 
 
 ## Genus relative abundance
-run_genus_rain_Tomato <- run_rain_Tom1 %>%
+run_genus_rain_Tomato <- RainT_rare %>%
   tax_glom(taxrank = "Genus") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
-  filter(Abundance > 0.03) %>%
+  filter(Abundance > 0.05) %>%
   arrange(Genus)
 
-write.csv(run_genus_rain_Tomato, 'run_genus_rain_Tomato_abun03.csv')
+write.csv(run_genus_rain_Tomato, 'run_genus_rain_Tomato_abun05.csv')
 
 library(RColorBrewer)
 n <- dim(run_genus_rain_Tomato)[1]
@@ -567,16 +581,12 @@ ggplot( data = rarefaction_curve_data_summary_verbose,
   ylab("Observed OTU")+
   ggtitle("Rarefaction Curves Rain-Tomato")
 
+
+rarecurve(t(otu_table(RainTom_rare)), step=500, cex=0.5)
+
 ############# ALPHA DIVERSITY INDICES 
-##### Rarefaction  
-run.rare_Rain_Tomato = rarefy_even_depth(run_Rain_Tomato, rngseed=1, sample.size=1*min(sample_sums(run_Rain_Tomato)), replace=F)
-
-sample_sums(run_Rain_Tomato)
-sample_sums(run.rare_Rain_Tomato)
-### RESULTS: Samples rarefied to 7133 reads
-
 ############ PLOT INDICES
-plot_richness(run.rare_Rain_Tomato,x="System",measures=c("Observed","Shannon","Simpson")) + 
+plot_richness(RainTom_rare,x="System",measures=c("Observed","Shannon","Simpson")) + 
   geom_boxplot() +
   ylab("Alpha Diversity") + 
   theme(axis.text.x=element_text(angle=90,hjust=0.5,size=10),
@@ -584,87 +594,94 @@ plot_richness(run.rare_Rain_Tomato,x="System",measures=c("Observed","Shannon","S
         axis.title.x = element_blank(),
         strip.text.x = element_text(size=18,face="bold"))
 
-rich = estimate_richness(run.rare_Rain_Tomato)
+rich = estimate_richness(RainTom_rare)
 write.csv(rich, 'richness_Rain_tomato_experiment.csv')
 
-pairwise.wilcox.test(rich$Observed, sample_data(run.rare_Rain_Tomato)$System)
-### RESULTS: CR.d0 vs CR.d7 = 0.020,   FR.d0 vs FR.d7 = 0.135,   W.d0 vs W.d7 = 0.312
-pairwise.wilcox.test(rich$Shannon, sample_data(run.rare_Rain_Tomato)$System)
-### RESULTS: CR.d0 vs CR.d7 = 0.049,   FR.d0 vs FR.d7 = 0.023,   W.d0 vs W.d7 = 0.281
-pairwise.wilcox.test(rich$Simpson, sample_data(run.rare_Rain_Tomato)$System)
-### RESULTS: CR.d0 vs CR.d7 = 0.58,   FR.d0 vs FR.d7 = 1.0,   W.d0 vs W.d7 = 0.91
+pairwise.wilcox.test(rich$Observed, sample_data(RainTom_rare)$System)
+### RESULTS: CR.d0 vs CR.d7 = 0.027,   FR.d0 vs FR.d7 = 0.061,   W.d0 vs W.d7 = 0.061
+pairwise.wilcox.test(rich$Shannon, sample_data(RainTom_rare)$System)
+### RESULTS: CR.d0 vs CR.d7 = 0.044,   FR.d0 vs FR.d7 = 0.023,   W.d0 vs W.d7 = 0.281
+pairwise.wilcox.test(rich$Simpson, sample_data(RainTom_rare)$System)
+### RESULTS: CR.d0 vs CR.d7 = 0.75,   FR.d0 vs FR.d7 = 1.0,   W.d0 vs W.d7 = 0.78
 
 ############### BETA DIVERSITY ANALYSIS
 
 #### Pairwise distances between samples are calculated: Weighted-Unifrac and unweighted-Unifrac.
-dm_weighted_unifrac <- phyloseq::distance(run.rare_Rain_Tomato, method = "wUniFrac")
+dm_weighted_unifrac <- phyloseq::distance(RainTom_rare, method = "wUniFrac")
 #### Plot
-ordWU_rain_Tom <- ordinate(run.rare_Rain_Tomato,method='PCoA',distance=dm_weighted_unifrac) 
-plot_ordination(run.rare_Rain_Tomato, ordWU_rain_Tom,,color = 'Source', shape='DayPoint') + 
-  geom_point(size=3) + 
-  theme(axis.text.x=element_text(size=14,angle=0,hjust =1),
+ordWU_rain_Tom <- ordinate(RainTom_rare,method='PCoA',distance=dm_weighted_unifrac) 
+plot_ordination(RainTom_rare, ordWU_rain_Tom, color = 'System') + theme(aspect.ratio=1)+
+  geom_point(size=4) + 
+  theme(axis.text.x=element_text(size=14,angle=90,hjust =0),
         axis.text.y = element_text(size = 14),
         strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=16, face = 'bold'),
         plot.title = element_text(size = rel(2)),
-        axis.title=element_text(size=16,face="bold", vjust = 10),
+        axis.title=element_text(size=16,face="bold", vjust =0),
         legend.text = element_text(size=14)) +
-  ggtitle("PCoA: Weighted Unifrac") +
-  scale_y_continuous(labels=percent_format(),expand=c(0,0))
+  ggtitle("PCoA: Weighted Unifrac")
+  scale_y_continuous(labels=scales::percent_format(accuracy = 1L))
 
-adonis(dm_weighted_unifrac ~ sample_data(run.rare_Rain_Tomato)$System)
-### RESULTS: Permutations: 999, Df:6, R2:1.9671 Pr(>F): 0.017
-
-dm_unweighted_unifrac <- phyloseq::distance(run.rare_Rain_Tomato, method='Unifrac')
+dm_unweighted_unifrac <- phyloseq::distance(RainTom_rare, method='Unifrac')
 #### Plot
-ordUU_rain_Tom <- ordinate(run.rare_Rain_Tomato,method='PCoA',distance=dm_unweighted_unifrac) 
-plot_ordination(run.rare_Rain_Tomato, ordUU_rain_Tom,,color = 'Source',shape='DayPoint') + 
-  geom_point(size=3) + 
+ordUU_rain_Tom <- ordinate(RainTom_rare,method='PCoA',distance=dm_unweighted_unifrac) 
+plot_ordination(RainTom_rare, ordUU_rain_Tom, color = 'System') + theme(aspect.ratio=1)+
+  geom_point(size=4) + 
   theme(axis.text.x=element_text(size=14,angle=0,hjust =1),
         axis.text.y = element_text(size = 14),
         strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=16, face = 'bold'),
         plot.title = element_text(size = rel(2)),
-        axis.title=element_text(size=16,face="bold", vjust = 10),
+        axis.title=element_text(size=16,face="bold", vjust = 0),
         legend.text = element_text(size=14)) +
   ggtitle("PCoA: Unweighted Unifrac") +
-  scale_y_continuous(labels=percent_format(),expand=c(0,0))
+  scale_y_continuous(labels=scales::percent_format(accuracy = 1L))
   
-adonis(dm_unweighted_unifrac ~ sample_data(run.rare_Rain_Tomato)$System)
-### RESULTS: Permutations: 999, Df:6, F.Model: 1.6631; R2:0.17214; Pr(>F): 0.001
-
-bray_diss_rain_Tom = phyloseq::distance(run.rare_Rain_Tomato, method="bray")
+bray_diss_rain_Tom = phyloseq::distance(RainTom_rare, method="bray")
 #### Plot
-ordination_rain_Tom = ordinate(run.rare_Rain_Tomato, method="PCoA", distance=bray_diss_rain_Tom)
-plot_ordination(run.rare_Rain_Tomato, ordination_rain_Tom, color = 'Source',shape='DayPoint') + theme(aspect.ratio=1)+
-  geom_point(size=3) + 
+ordination_rain_Tom = ordinate(RainTom_rare, method="PCoA", distance=bray_diss_rain_Tom)
+allGroupsColors<- c("deepskyblue", "darkslateblue", "darkorchid1", "red","red4", "greenyellow", "green4")
+plot_ordination(RainTom_rare, ordination_rain_Tom, color = 'System') + theme(aspect.ratio=1)+
+  geom_point(size=4) + 
+  scale_color_manual(values = allGroupsColors) +
   theme(axis.text.x=element_text(size=14,angle=0,hjust =0.5),
         axis.text.y = element_text(size = 14),
         strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=16, face = 'bold'),
         plot.title = element_text(size = rel(2)),
-        axis.title=element_text(size=14,face="bold", vjust = 10),
+        axis.title=element_text(size=14,face="bold", vjust = 0),
         legend.text = element_text(size=14)) +
-  ggtitle("PCoA: Bray-Curtis")
+  ggtitle("PCoA: Bray-Curtis") +
+  scale_y_continuous(labels=scales::percent_format(accuracy = 1L))
 
-adonis(bray_diss_rain_Tom ~ sample_data(run.rare_Rain_Tomato)$System)
-### RESULTS: Permutations: 999, Df:6, F.Model: 2.2065; R2:0.21618; Pr(>F): 0.001
+
+adonis2(bray_diss_rain_Tom ~ sample_data(RainTom_rare1)$Treatment + sample_data(RainTom_rare1)$DayPoint, by = "margin")
+adonis2(bray_diss_rain_Tom ~ sample_data(RainTom_rare1)$Treatment*sample_data(RainTom_rare1)$DayPoint, by = "margin")
+
+adonis2(bray_diss_rain_Tom ~ sample_data(RainTom_rare1)$System + sample_data(RainTom_rare1)$DateExperiment, by = "margin")
+adonis2(bray_diss_rain_Tom ~ sample_data(RainTom_rare1)$System*sample_data(RainTom_rare1)$DateExperiment, by = "margin")
+
+adonis2(bray_diss_rain_Tom ~ sample_data(RainTom_rare1)$DateExperiment + sample_data(RainTom_rare1)$DayP, by = "margin")
+adonis2(bray_diss_rain_Tom ~ sample_data(RainTom_rare1)$Treatment*sample_data(RainTom_rare1)$DateExperiment, by = "margin")
+
+adonis2(bray_diss_rain_Tom ~ sample_data(RainTom_rare1)$Treatment*sample_data(RainTom_rare1)$DayPoint + sample_data(RainTom_rare1)$DateExperiment)
+
+adonis2(dm_unweighted_unifrac ~ sample_data(RainTom_rare1)$Treatment*sample_data(RainTom_rare1)$DayPoint + sample_data(RainTom_rare1)$DateExperiment)
+
+adonis2(dm_weighted_unifrac ~ sample_data(RainTom_rare1)$Treatment*sample_data(RainTom_rare1)$DayPoint + sample_data(RainTom_rare1)$DateExperiment)
 
 
 ############## DIFERENCTIAL ABUNDANCES RAIN AS SOURCE OF PHYLLOSPHERE MICROBIOME
 ### Tomato plants treated with Rain: day0 vs day 7
-run_RAIN <- subset_samples(run, System%in%c("CR.d0","CR.d7"))
-run_RAIN1 <- prune_taxa(taxa_sums(run_RAIN) > 0, run_RAIN)
-summary(sample_data(run_RAIN1)$System)
-print(run_RAIN1)
-###### 17 samples
-###### 13904 taxa
-sample_sums(run_RAIN1)
 
-run_RAIN1 <- prune_samples(sample_sums(run_RAIN1) > 500, run_RAIN1)
-head(sample_data(run_RAIN1)$System, 25)
+TOM_CR <- subset_samples(run_R_T, System%in%c("CR.d0","CR.d7"))
+TOM_CR <- prune_taxa(taxa_sums(TOM_CR) > 0, TOM_CR)
+summary(sample_data(TOM_CR)$System)
 
-deseq_rain = phyloseq_to_deseq2(run_RAIN1, ~ System)
+TOM_CR <- prune_samples(sample_sums(TOM_CR) > 500, TOM_CR)
+head(sample_data(TOM_CR)$System, 25)
+
+deseq_rain = phyloseq_to_deseq2(TOM_CR, ~ System)
 # calculate geometric means prior to estimate size factors
 gm_mean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
@@ -677,31 +694,32 @@ res = results(deseq_rain)
 res = res[order(res$padj, na.last=NA), ]
 alpha = 0.01
 sigtab = res[(res$padj < alpha), ]
-sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(run_RAIN1)[rownames(sigtab), ], "matrix"))
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(TOM_CR)[rownames(sigtab), ], "matrix"))
 head(sigtab)
+dim(sigtab)
 ##### To write all OTUs that were significant different: positives and negatives
-sigtab = sigtab[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
+sigtab = sigtab[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus", "Species")]
 
-write.csv(sigtab, 'DEseq_all_values_RAINd0_vs_RAINd7.csv')
+write.csv(sigtab, 'DEseq_all_values1_RAINd0_vs_RAINd7.csv')
 ###### RESULT: 116 TAXA differentially abundant ##############
 ##### To subset positives values
 posigtab = sigtab[sigtab[, "log2FoldChange"] > 0, ]
-posigtab = posigtab[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
+posigtab = posigtab[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus", "Species")]
 
-write.csv(posigtab, 'Differential_abundance_RAINd0_vs_RAINd7.csv')
+write.csv(posigtab, 'Differential_abundance1_RAINd0_vs_RAINd7.csv')
 ###### RESULT: 104 TAXA differentially abundant ##############
 
 theme_set(theme_bw())
-sigtabgen = subset(sigtab, !is.na(Genus))
+sigtabgen = subset(sigtab, !is.na(Species))
 # Phylum order
 x = tapply(sigtabgen$log2FoldChange, sigtabgen$Phylum, function(x) max(x))
 x = sort(x, TRUE)
 sigtabgen$Phylum = factor(as.character(sigtabgen$Phylum), levels=names(x))
 # Genus order
-x = tapply(sigtabgen$log2FoldChange, sigtabgen$Genus, function(x) max(x))
+x = tapply(sigtabgen$log2FoldChange, sigtabgen$Species, function(x) max(x))
 x = sort(x, TRUE)
-sigtabgen$Genus = factor(as.character(sigtabgen$Genus), levels=names(x))
-ggplot(sigtabgen, aes(y=Genus, x=log2FoldChange, color=Phylum)) + 
+sigtabgen$Genus = factor(as.character(sigtabgen$Species), levels=names(x))
+ggplot(sigtabgen, aes(y=Species, x=log2FoldChange, color=Phylum)) + 
   geom_vline(xintercept = 0.0, color = "gray", size = 0.5) +
   geom_point(size=6) + 
   theme(axis.text.x=element_text(size=16,angle=0,hjust =1,  vjust=0.5),
@@ -717,12 +735,12 @@ ggplot(sigtabgen, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
 
 
 ### Tomato plants treated with Filtered Rain: day0 vs day 7
-run_FRain <- subset_samples(run, System%in%c("FR.d0","FR.d7"))
+run_FRain <- subset_samples(RainTom_rare, System%in%c("FR.d0","FR.d7"))
 run_FRAIN1 <- prune_taxa(taxa_sums(run_FRain) > 0, run_FRain)
 summary(sample_data(run_FRAIN1)$System)
 print(run_FRAIN1)
 ###### 16 samples
-###### 11298 taxa
+###### 5424 taxa
 sample_sums(run_FRAIN1)
 
 run_FRAIN1 <- prune_samples(sample_sums(run_FRAIN1) > 500, run_FRAIN1)
@@ -756,16 +774,16 @@ write.csv(posigtab_FR, 'Differential_abundance_FR_d0_vs_FR_d7.csv')
 
 
 ### Tomato plants treated with Sterile Water: day0 vs day 7
-run_SWater <- subset_samples(run, System%in%c("W.d0","W.d7"))
+run_SWater <- subset_samples(RainT_rare, System%in%c("W.d0","W.d7"))
 run_SW1 <- prune_taxa(taxa_sums(run_SWater) > 0, run_SWater)
 summary(sample_data(run_SW1)$System)
 print(run_SW1)
 ###### 12 samples
-###### 9929 taxa
+###### 4210 taxa
 sample_sums(run_SW1)
 run_SW1 <- prune_samples(sample_sums(run_SW1) > 500, run_SW1)
 head(sample_data(run_SW1)$System, 25)
-deseq_FR = phyloseq_to_deseq2(run_SW1, ~ System)
+deseq_W = phyloseq_to_deseq2(run_SW1, ~ System)
 # calculate geometric means prior to estimate size factors
 gm_mean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
@@ -790,41 +808,16 @@ posigtab_W = sigtab_W[sigtab_W[, "log2FoldChange"] > 0, ]
 posigtab_W = posigtab_W[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
 
 write.csv(posigtab_W, 'Differential_abundance_water_0_7.csv')
-########## 12 TAXA are differentially abundant ###########
-
-library("ggplot2")
-theme_set(theme_bw())
-sigtabgen_W = subset(sigtab_W, !is.na(Genus))
-# Phylum order
-x = tapply(sigtabgen_W$log2FoldChange, sigtabgen_W$Phylum, function(x) max(x))
-x = sort(x, TRUE)
-sigtabgen_W$Phylum = factor(as.character(sigtabgen_W$Phylum), levels=names(x))
-# Genus order
-x = tapply(sigtabgen_W$log2FoldChange, sigtabgen_W$Genus, function(x) max(x))
-x = sort(x, TRUE)
-sigtabgen_W$Genus = factor(as.character(sigtabgen_W$Genus), levels=names(x))
-ggplot(sigtabgen_W, aes(y=Genus, x=log2FoldChange, color=Phylum)) + 
-  geom_vline(xintercept = 0.0, color = "gray", size = 0.5) +
-  geom_point(size=6) + 
-  theme(axis.text.x=element_text(size=16,angle=0,hjust =1,  vjust=0.5),
-        axis.text.y = element_text(size = 16),
-        strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
-        strip.text.y = element_text(size=16, face = 'bold'),
-        plot.title = element_text(size = rel(2)),
-        axis.title=element_text(size=16,face="bold", vjust = 10),
-        legend.text = element_text(size=14)) +
-  ylab("TAXA \n") +
-  xlab("Log2FoldChange") +
-  ggtitle("Tomato treated with Water d0 vs d7")
+########## 0 TAXA are differentially abundant ###########
 
 
 ### Rain vs Tomato treated with C.Rain.day7
-run_R_R7 <- subset_samples(run, System%in%c("CR.d7","Atm.Rain"))
+run_R_R7 <- subset_samples(RainTom_rare, System%in%c("CR.d7","Atm.Rain"))
 run_R_CR7 <- prune_taxa(taxa_sums(run_R_R7) > 0, run_R_R7)
 summary(sample_data(run_R_CR7)$System)
 print(run_R_CR7)
 ###### 19 samples
-###### 18870 taxa
+###### 8062 taxa
 sample_sums(run_R_CR7)
 
 run_R_CR7 <- prune_samples(sample_sums(run_R_CR7) > 500, run_R_CR7)
@@ -881,12 +874,12 @@ ggplot(sigtabgen_Rain_7, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
 
 
 ### Rain vs FilteredRain day 7
-run_Rain_FR7 <- subset_samples(run, System%in%c("FR.d7","Atm.Rain"))
+run_Rain_FR7 <- subset_samples(RainTom_rare, System%in%c("FR.d7","Atm.Rain"))
 run_R_FR7 <- prune_taxa(taxa_sums(run_Rain_FR7) > 0, run_Rain_FR7)
 summary(sample_data(run_R_FR7)$System)
 print(run_R_FR7)
 ###### 18 samples
-###### 18145 taxa
+###### 7890 taxa
 sample_sums(run_R_FR7)
 
 run_R_FR7 <- prune_samples(sample_sums(run_R_FR7) > 500, run_R_FR7)
@@ -943,12 +936,12 @@ ggplot(sigtabgen_Rain_FR7, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
 
 
 ### Rain vs Tomato treated with Sterile Water day 7
-run_R_SWater7 <- subset_samples(run, System%in%c("W.d7","Atm.Rain"))
+run_R_SWater7 <- subset_samples(DeSeq2 , System%in%c("W.d7","Atm.Rain"))
 run_R_SW7 <- prune_taxa(taxa_sums(run_R_SWater7) > 0, run_R_SWater7)
 summary(sample_data(run_R_SW7)$System)
 print(run_R_SW7)
 ###### 16 samples
-###### 17829 taxa
+###### 7359 taxa
 sample_sums(run_R_SW7)
 
 run_R_SW7 <- prune_samples(sample_sums(run_R_SW7) > 500, run_R_SW7)
@@ -1004,12 +997,12 @@ ggplot(sigtabgen_Rain_W7, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
 
 
 ###### Rain vs Tomato Treated with rain day 0
-run_R_R0 <- subset_samples(run, System%in%c("CR.d0","Atm.Rain"))
+run_R_R0 <- subset_samples(RainTom_rare, System%in%c("CR.d0", "Atm.Rain"))
 run_R_CR0 <- prune_taxa(taxa_sums(run_R_R0) > 0, run_R_R0)
 summary(sample_data(run_R_CR0)$System)
 print(run_R_CR0)
 ###### 18 samples
-###### 16917 taxa
+###### 8646 taxa
 sample_sums(run_R_CR0)
 
 run_R_CR0 <- prune_samples(sample_sums(run_R_CR0) > 500, run_R_CR0)
@@ -1054,7 +1047,7 @@ ggplot(sigtabgen_Rain_0, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
   geom_vline(xintercept = 0.0, color = "gray", size = 0.5) +
   geom_point(size=4) + 
   theme(axis.text.x=element_text(size=16,angle=0,hjust =1,  vjust=0.5),
-        axis.text.y = element_text(size = 9),
+        axis.text.y = element_text(size = 16),
         strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
         strip.text.y = element_text(size=16, face = 'bold'),
         plot.title = element_text(size = rel(2)),
@@ -1066,12 +1059,12 @@ ggplot(sigtabgen_Rain_0, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
 
 
 ### Rain vs tomato treated with Filtered Rain day 0
-run_Rain_FR0 <- subset_samples(run, System%in%c("FR.d0","Atm.Rain"))
+run_Rain_FR0 <- subset_samples(RainTom_rare, System%in%c("FR.d0","Atm.Rain"))
 run_R_FR0 <- prune_taxa(taxa_sums(run_Rain_FR0) > 0, run_Rain_FR0)
 summary(sample_data(run_R_FR0)$System)
 print(run_R_FR0)
 ###### 18 samples
-###### 16784 taxa
+###### 8456 taxa
 sample_sums(run_R_FR0)
 
 run_R_FR0 <- prune_samples(sample_sums(run_R_FR0) > 500, run_R_FR0)
@@ -1128,12 +1121,12 @@ ggplot(sigtabgen_Rain_FR0, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
 
 
 ### Rain vs Tomato treated with sterile Water day 0
-run_R_SWater0 <- subset_samples(run, System%in%c("W.d0","Atm.Rain"))
+run_R_SWater0 <- subset_samples(RainTom_rare, System%in%c("W.d0","Atm.Rain"))
 run_R_SW0 <- prune_taxa(taxa_sums(run_R_SWater0) > 0, run_R_SWater0)
 summary(sample_data(run_R_SW0)$System)
 print(run_R_SW0)
 ###### 16 samples
-###### 16333 taxa
+###### 7857 taxa
 sample_sums(run_R_SW0)
 
 run_R_SW0 <- prune_samples(sample_sums(run_R_SW0) > 500, run_R_SW0)
@@ -1191,41 +1184,40 @@ ggplot(sigtabgen_Rain_W0, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
 #################################################################################################
 ###################### 3) TOMATO LEAF MICROBIOME GROWN ON GREENHOUSE SYSTEM #####################
 
-##### Number of OTUs #######
-RSF_Hydroponics <- subset_samples(run, System%in%c("Hydroponic"))
-RSF_H <- prune_taxa(taxa_sums(RSF_Hydroponics) > 0, RSF_Hydroponics)
-summary(sample_data(RSF_H)$System)
-print(RSF_H)  ###### 29 samples #### 13910 TAXA ######
-
-RSF_Organics <- subset_samples(run, System%in%c("Organic"))
-RSF_O <- prune_taxa(taxa_sums(RSF_Organics) > 0, RSF_Organics)
-summary(sample_data(RSF_O)$System)
-print(RSF_O)  ###### 18 Samples ####10157 TAXA ######
-
-RSF_OutRain <- subset_samples(run, System%in%c("Out.Rain"))
-RSF_OUTR <- prune_taxa(taxa_sums(RSF_OutRain) > 0, RSF_OutRain)
-summary(sample_data(RSF_OUTR)$System)
-print(RSF_OUTR)  ###### 7 samples #### 10190 TAXA ######
-
-RSF_OutNoRain <- subset_samples(run, System%in%c("Out.No.Rain"))
-RSF_OUTNR <- prune_taxa(taxa_sums(RSF_OutNoRain) > 0, RSF_OutNoRain)
-summary(sample_data(RSF_OUTNR)$System)
-print(RSF_OUTNR)  ###### 3 samples #### 7691 TAXA ######
-
 ## Subsample-Only Greenhouse and plants grown outside samples:
 run_RSF_TOM <- subset_samples(run, System%in%c("Hydroponic","Organic","Out.Rain"))
 run_RSF_Tomato <- prune_taxa(taxa_sums(run_RSF_TOM) > 0, run_RSF_TOM)
 summary(sample_data(run_RSF_Tomato)$System)
 print(run_RSF_Tomato)
-write.csv(otu_table(run_RSF_Tomato), 'run_RSF_Tomato_OTU_table.csv')
-
-###### 54 samples
-###### 21979 taxa
+###### 57 samples
+###### 23146 taxa
 sample_sums(run_RSF_Tomato)
+
+run_RSF_rarefied = rarefy_even_depth(run_RSF_Tomato, rngseed=1, sample.size=1*min(sample_sums(run_RSF_Tomato)), replace=F)
+print(run_RSF_rarefied)
+sample_sums(run_RSF_rarefied)
+summary(sample_data(run_RSF_rarefied)$System)
+
+##### Number of OTUs #######
+RSF_Hydroponics <- subset_samples(run_RSF_rarefied, System%in%c("Hydroponic"))
+RSF_H <- prune_taxa(taxa_sums(RSF_Hydroponics) > 0, RSF_Hydroponics)
+summary(sample_data(RSF_H)$System)
+print(RSF_H)  ###### 29 samples #### 7346 TAXA ######
+
+RSF_Organics <- subset_samples(run_RSF_rarefied, System%in%c("Organic"))
+RSF_O <- prune_taxa(taxa_sums(RSF_Organics) > 0, RSF_Organics)
+summary(sample_data(RSF_O)$System)
+print(RSF_O)  ###### 18 Samples ####3657 TAXA ######
+
+RSF_OutRain <- subset_samples(run_RSF_rarefied, System%in%c("Out.Rain"))
+RSF_OUTR <- prune_taxa(taxa_sums(RSF_OutRain) > 0, RSF_OutRain)
+summary(sample_data(RSF_OUTR)$System)
+print(RSF_OUTR)  ###### 7 samples #### 2406 TAXA ######
+
 
 ################ Relative abundance 
 #### Phylum Relative abundance
-run_RSF_phylum <- run_RSF_Tomato %>%
+run_RSF_phylum <- run_RSF_rarefied %>%
   tax_glom(taxrank = "Phylum") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
@@ -1237,7 +1229,7 @@ qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
 col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
 
 run_RSF_phylum$Phylum <- factor(run_RSF_phylum$Phylum, levels = rev(levels(run_RSF_phylum$Phylum)))
-run_RSF_phylum$SampleID <- factor(run_RSF_phylum$SampleID, levels = c("RSF1.H.T1","RSF1.H.T2","RSF1.H.T3","RSF1.H.B1","RSF1.H.B2","RSF1.H.B3","RSF2.H.T1","RSF2.H.T2","RSF2.H.T3","RSF3.H.1","RSF3.H.2","RSF3.H.3","RSF4.H.1","RSF4.H.2","RSF4.H.3","RSF4.H.4","RSF5.HK.1","RSF5.HK.2","RSF5.HK.3","RSF5.HQ.1","RSF5.HQ.2","RSF5.HQ.3","RSF6.HQ.1","RSF6.HQ.2","RSF6.HQ.3","RSF6.HK.1","RSF6.HK.2","RSF6.HK.3","RSF6.HK.4","RSF1.S.T1","RSF2.S.T1","RSF2.SK.T1","RSF2.S.T2","RSF2.SK.T2","RSF2.S.T3","RSF2.SK.T3","RSF3.S.1","RSF3.S.2","RSF3.S.3","RSF3.S.4","RSF4.S.1","RSF4.S.2","RSF4.S.3","RSF4.S.4","RSF5.SK.1","RSF5.SK.2","RSF5.SK.3","RioG.Roof.1","RioG.Roof.2","Kom.Roof","TR.6.17.Latham","TR.6.21.Latham","TR.7.15.AREC","TR.7.25.AREC","TNR.6.17.Latham","TNR.6.21.Latham","TNR.7.15.AREC"))
+run_RSF_phylum$SampleID <- factor(run_RSF_phylum$SampleID, levels = c("RSF1.H.T1","RSF1.H.T2","RSF1.H.T3","RSF1.H.B1","RSF1.H.B2","RSF1.H.B3","RSF2.H.T1","RSF2.H.T2","RSF2.H.T3","RSF3.H.1","RSF3.H.2","RSF3.H.3","RSF4.H.1","RSF4.H.2","RSF4.H.3","RSF4.H.4","RSF5.HK.1","RSF5.HK.2","RSF5.HK.3","RSF5.HQ.1","RSF5.HQ.2","RSF5.HQ.3","RSF6.HQ.1","RSF6.HQ.2","RSF6.HQ.3","RSF6.HK.1","RSF6.HK.2","RSF6.HK.3","RSF6.HK.4","RSF1.S.T1","RSF2.S.T1","RSF2.SK.T1","RSF2.S.T2","RSF2.SK.T2","RSF2.S.T3","RSF2.SK.T3","RSF3.S.1","RSF3.S.2","RSF3.S.3","RSF3.S.4","RSF4.S.1","RSF4.S.2","RSF4.S.3","RSF4.S.4","RSF5.SK.1","RSF5.SK.2","RSF5.SK.3","RioG.Roof.1","RioG.Roof.2","Kom.Roof","TR.6.17.Latham","TR.6.21.Latham","TR.7.15.AREC","TR.7.25.AREC"))
 
 ggplot(run_RSF_phylum,aes(x=SampleID,y=Abundance,fill=Phylum)) +
   geom_bar(position="fill",stat="identity") + 
@@ -1260,7 +1252,7 @@ ggplot(run_RSF_phylum,aes(x=SampleID,y=Abundance,fill=Phylum)) +
 
 
 ### Class Relative abundance
-run_RSF_class <- run_RSF_Tomato %>%
+run_RSF_class <- run_RSF_rarefied %>%
   tax_glom(taxrank = "Class") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
@@ -1272,7 +1264,7 @@ qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
 col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
 
 run_RSF_class$Class <- factor(run_RSF_class$Class, levels = rev(levels(run_RSF_class$Class)))
-run_RSF_class$SampleID <- factor(run_RSF_class$SampleID, levels = c("RSF1.H.T1","RSF1.H.T2","RSF1.H.T3","RSF1.H.B1","RSF1.H.B2","RSF1.H.B3","RSF2.H.T1","RSF2.H.T2","RSF2.H.T3","RSF3.H.1","RSF3.H.2","RSF3.H.3","RSF4.H.1","RSF4.H.2","RSF4.H.3","RSF4.H.4","RSF5.HK.1","RSF5.HK.2","RSF5.HK.3","RSF5.HQ.1","RSF5.HQ.2","RSF5.HQ.3","RSF6.HQ.1","RSF6.HQ.2","RSF6.HQ.3","RSF6.HK.1","RSF6.HK.2","RSF6.HK.3","RSF6.HK.4","RSF1.S.T1","RSF2.S.T1","RSF2.SK.T1","RSF2.S.T2","RSF2.SK.T2","RSF2.S.T3","RSF2.SK.T3","RSF3.S.1","RSF3.S.2","RSF3.S.3","RSF3.S.4","RSF4.S.1","RSF4.S.2","RSF4.S.3","RSF4.S.4","RSF5.SK.1","RSF5.SK.2","RSF5.SK.3","RioG.Roof.1","RioG.Roof.2","Kom.Roof","TR.6.17.Latham","TR.6.21.Latham","TR.7.15.AREC","TR.7.25.AREC","TNR.6.17.Latham","TNR.6.21.Latham","TNR.7.15.AREC"))
+run_RSF_class$SampleID <- factor(run_RSF_class$SampleID, levels = c("RSF1.H.T1","RSF1.H.T2","RSF1.H.T3","RSF1.H.B1","RSF1.H.B2","RSF1.H.B3","RSF2.H.T1","RSF2.H.T2","RSF2.H.T3","RSF3.H.1","RSF3.H.2","RSF3.H.3","RSF4.H.1","RSF4.H.2","RSF4.H.3","RSF4.H.4","RSF5.HK.1","RSF5.HK.2","RSF5.HK.3","RSF5.HQ.1","RSF5.HQ.2","RSF5.HQ.3","RSF6.HQ.1","RSF6.HQ.2","RSF6.HQ.3","RSF6.HK.1","RSF6.HK.2","RSF6.HK.3","RSF6.HK.4","RSF1.S.T1","RSF2.S.T1","RSF2.SK.T1","RSF2.S.T2","RSF2.SK.T2","RSF2.S.T3","RSF2.SK.T3","RSF3.S.1","RSF3.S.2","RSF3.S.3","RSF3.S.4","RSF4.S.1","RSF4.S.2","RSF4.S.3","RSF4.S.4","RSF5.SK.1","RSF5.SK.2","RSF5.SK.3","RioG.Roof.1","RioG.Roof.2","Kom.Roof","TR.6.17.Latham","TR.6.21.Latham","TR.7.15.AREC","TR.7.25.AREC"))
 
 ggplot(run_RSF_class,aes(x=SampleID,y=Abundance,fill=Class)) +
   geom_bar(position="fill",stat="identity") + 
@@ -1295,7 +1287,7 @@ ggplot(run_RSF_class,aes(x=SampleID,y=Abundance,fill=Class)) +
 
 
 #### Family Relative Abundance
-run_RSF_family <- run_RSF_Tomato %>%
+run_RSF_family <- run_RSF_rarefied %>%
   tax_glom(taxrank = "Family") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
@@ -1307,7 +1299,7 @@ qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
 col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
 
 run_RSF_family$Family <- factor(run_RSF_family$Family, levels = rev(levels(run_RSF_family$Family)))
-run_RSF_family$SampleID <- factor(run_RSF_family$SampleID, levels = c("RSF1.H.T1","RSF1.H.T2","RSF1.H.T3","RSF1.H.B1","RSF1.H.B2","RSF1.H.B3","RSF2.H.T1","RSF2.H.T2","RSF2.H.T3","RSF3.H.1","RSF3.H.2","RSF3.H.3","RSF4.H.1","RSF4.H.2","RSF4.H.3","RSF4.H.4","RSF5.HK.1","RSF5.HK.2","RSF5.HK.3","RSF5.HQ.1","RSF5.HQ.2","RSF5.HQ.3","RSF6.HQ.1","RSF6.HQ.2","RSF6.HQ.3","RSF6.HK.1","RSF6.HK.2","RSF6.HK.3","RSF6.HK.4","RSF1.S.T1","RSF2.S.T1","RSF2.SK.T1","RSF2.S.T2","RSF2.SK.T2","RSF2.S.T3","RSF2.SK.T3","RSF3.S.1","RSF3.S.2","RSF3.S.3","RSF3.S.4","RSF4.S.1","RSF4.S.2","RSF4.S.3","RSF4.S.4","RSF5.SK.1","RSF5.SK.2","RSF5.SK.3","RioG.Roof.1","RioG.Roof.2","Kom.Roof","TR.6.17.Latham","TR.6.21.Latham","TR.7.15.AREC","TR.7.25.AREC","TNR.6.17.Latham","TNR.6.21.Latham","TNR.7.15.AREC"))
+run_RSF_family$SampleID <- factor(run_RSF_family$SampleID, levels = c("RSF1.H.T1","RSF1.H.T2","RSF1.H.T3","RSF1.H.B1","RSF1.H.B2","RSF1.H.B3","RSF2.H.T1","RSF2.H.T2","RSF2.H.T3","RSF3.H.1","RSF3.H.2","RSF3.H.3","RSF4.H.1","RSF4.H.2","RSF4.H.3","RSF4.H.4","RSF5.HK.1","RSF5.HK.2","RSF5.HK.3","RSF5.HQ.1","RSF5.HQ.2","RSF5.HQ.3","RSF6.HQ.1","RSF6.HQ.2","RSF6.HQ.3","RSF6.HK.1","RSF6.HK.2","RSF6.HK.3","RSF6.HK.4","RSF1.S.T1","RSF2.S.T1","RSF2.SK.T1","RSF2.S.T2","RSF2.SK.T2","RSF2.S.T3","RSF2.SK.T3","RSF3.S.1","RSF3.S.2","RSF3.S.3","RSF3.S.4","RSF4.S.1","RSF4.S.2","RSF4.S.3","RSF4.S.4","RSF5.SK.1","RSF5.SK.2","RSF5.SK.3","RioG.Roof.1","RioG.Roof.2","Kom.Roof","TR.6.17.Latham","TR.6.21.Latham","TR.7.15.AREC","TR.7.25.AREC"))
 
 ggplot(run_RSF_family,aes(x=SampleID,y=Abundance,fill=Family)) +
   geom_bar(position="fill",stat="identity") + 
@@ -1330,11 +1322,11 @@ ggplot(run_RSF_family,aes(x=SampleID,y=Abundance,fill=Family)) +
 
 
 ##Genus relative abundance
-run_RSF_genus <- run_RSF_Tomato %>%
+run_RSF_genus <- run_RSF_rarefied %>%
   tax_glom(taxrank = "Genus") %>%
   transform_sample_counts(function(x){x/sum(x)}) %>%
   psmelt() %>%
-  filter(Abundance > 0.05) %>%
+  filter(Abundance > 0.03) %>%
   arrange(Genus)
 
 n <- dim(run_RSF_genus)[1]
@@ -1342,13 +1334,13 @@ qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
 col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
 
 run_RSF_genus$Genus <- factor(run_RSF_genus$Genus, levels = rev(levels(run_RSF_genus$Genus)))
-run_RSF_genus$SampleID <- factor(run_RSF_genus$SampleID, levels = c("RSF1.H.T1","RSF1.H.T2","RSF1.H.T3","RSF1.H.B1","RSF1.H.B2","RSF1.H.B3","RSF2.H.T1","RSF2.H.T2","RSF2.H.T3","RSF3.H.1","RSF3.H.2","RSF3.H.3","RSF4.H.1","RSF4.H.2","RSF4.H.3","RSF4.H.4","RSF5.HK.1","RSF5.HK.2","RSF5.HK.3","RSF5.HQ.1","RSF5.HQ.2","RSF5.HQ.3","RSF6.HQ.1","RSF6.HQ.2","RSF6.HQ.3","RSF6.HK.1","RSF6.HK.2","RSF6.HK.3","RSF6.HK.4","RSF1.S.T1","RSF2.S.T1","RSF2.SK.T1","RSF2.S.T2","RSF2.SK.T2","RSF2.S.T3","RSF2.SK.T3","RSF3.S.1","RSF3.S.2","RSF3.S.3","RSF3.S.4","RSF4.S.1","RSF4.S.2","RSF4.S.3","RSF4.S.4","RSF5.SK.1","RSF5.SK.2","RSF5.SK.3","RioG.Roof.1","RioG.Roof.2","Kom.Roof","TR.6.17.Latham","TR.6.21.Latham","TR.7.15.AREC","TR.7.25.AREC","TNR.6.17.Latham","TNR.6.21.Latham","TNR.7.15.AREC"))
+run_RSF_genus$SampleID <- factor(run_RSF_genus$SampleID, levels = c("RSF1.H.T1","RSF1.H.T2","RSF1.H.T3","RSF1.H.B1","RSF1.H.B2","RSF1.H.B3","RSF2.H.T1","RSF2.H.T2","RSF2.H.T3","RSF3.H.1","RSF3.H.2","RSF3.H.3","RSF4.H.1","RSF4.H.2","RSF4.H.3","RSF4.H.4","RSF5.HK.1","RSF5.HK.2","RSF5.HK.3","RSF5.HQ.1","RSF5.HQ.2","RSF5.HQ.3","RSF6.HQ.1","RSF6.HQ.2","RSF6.HQ.3","RSF6.HK.1","RSF6.HK.2","RSF6.HK.3","RSF6.HK.4","RSF1.S.T1","RSF2.S.T1","RSF2.SK.T1","RSF2.S.T2","RSF2.SK.T2","RSF2.S.T3","RSF2.SK.T3","RSF3.S.1","RSF3.S.2","RSF3.S.3","RSF3.S.4","RSF4.S.1","RSF4.S.2","RSF4.S.3","RSF4.S.4","RSF5.SK.1","RSF5.SK.2","RSF5.SK.3","RioG.Roof.1","RioG.Roof.2","Kom.Roof","TR.6.17.Latham","TR.6.21.Latham","TR.7.15.AREC","TR.7.25.AREC"))
 
 ggplot(run_RSF_genus,aes(x=SampleID,y=Abundance,fill=Genus)) +
   geom_bar(position="fill",stat="identity") + 
   scale_fill_manual(values = col_vector) + 
   guides(fill=guide_legend(reverse=T,keywidth = 1,keyheight = 1)) + 
-  ylab("Relative Abundance (Genus > 5%) \n") +
+  ylab("Relative Abundance (Genus > 3%) \n") +
   xlab("Sample") +
   theme(axis.text.x=element_text(size=11,angle=90,hjust =1),
         axis.text.y = element_text(size = 14),
@@ -1421,15 +1413,10 @@ ggplot( data = rarefaction_curve_data_summary_verbose,
   ylab("Observed OTU")+
   ggtitle("Rarefaction Curves RSF-Outside")
 
-########## Rarefaction for Diversity analysis
-run_RSF_rarefied = rarefy_even_depth(run_RSF_Tomato, rngseed=1, sample.size=1*min(sample_sums(run_RSF_Tomato)), replace=F)
-
-sample_sums(run_RSF_Tomato)
-print(run_RSF_Tomato)
-####### 54 samples ###### 21979 taxa ########
+########## Use rarefied samples for Diversity analysis
 sample_sums(run_RSF_rarefied)
 print(run_RSF_rarefied)
-####### 54 samples ###### 10194 taxa ########
+####### 57 samples ###### 10194 taxa ########
 ####### Samples were rarefied to 2546 reads/sample #####
 
 ####### Alpha diversity indices######
@@ -1755,6 +1742,176 @@ plot(Out.Raincore + theme(axis.text.x=element_text(size=12,angle=0,hjust =1),
                     ggtitle("Core Tomatoes exposed to Rain")+
                     xlab("Detection threshold (Relative abundance %) "))
 
+######### Tomato Plants NOT exposed to Rain 
+RSF_rare_Out.NRain <- subset_samples(run_RSF_rarefied, System == "Out.No.Rain") 
+RSF_rare_Out.No.Rain <- prune_taxa(taxa_sums(RSF_rare_Out.NRain) > 0, RSF_rare_Out.NRain)
+summary(sample_data(RSF_rare_Out.No.Rain)$System)
+print(RSF_rare_Out.No.Rain)
+sample_sums(RSF_rare_Out.No.Rain)
+## RESULTS: 
+###### 3 samples
+###### 1312 taxa
+###### Samples were rarefied to 2546 reads per sample
+
+## keep only taxa with positive sums
+Out.No.Rain_rare.1 <- prune_taxa(taxa_sums(RSF_rare_Out.No.Rain) > 0, RSF_rare_Out.No.Rain)
+
+## Relative abundances
+Out.No.Rain_rare.rel <- microbiome::transform(Out.No.Rain_rare.1, "compositional")
+## Relative population frequencies; at 1% compositional abundance threshold:
+head(prevalence(Out.No.Rain_rare.rel, detection = 1, sort = TRUE))
+## Phyloseq object of the core microbiota:
+Out.No.Rain.core <- core(Out.No.Rain_rare.rel, detection = 0, prevalence = .5)
+## Retrieving the associated taxa names from the phyloseq object:
+Out.No.Rain_core.taxa <- taxa(Out.No.Rain.core)
+class(Out.No.Rain_core.taxa)
+## get the taxonomy data
+Out.No.Raintax.mat <- tax_table(Out.No.Rain.core)
+Out.No.Raintax.df <- as.data.frame(Out.No.Raintax.mat)
+
+## add the OTus to last column
+Out.No.Raintax.df$OTU <- rownames(Out.No.Raintax.df)
+
+## select taxonomy of only 
+## those OTUs that are core members based on the thresholds that were used.
+Out.No.Rain_core.taxa.class <- dplyr::filter(Out.No.Raintax.df, rownames(Out.No.Raintax.df) %in% Out.No.Rain_core.taxa)
+knitr::kable(head(Out.No.Rain_core.taxa.class))
+
+###### Core heatmaps
+## Set different detection levels and prevalence
+prevalences <- seq(.5, 1, .5) #0.5 = 95% prevalence
+detections <- 10^seq(log10(1e-1), log10(max(abundances(Out.No.Rain_rare.1))/10), length = 10)
+
+Out.No.Raincore <- plot_core(Out.No.Rain_rare.1, plot.type = "heatmap", 
+                             prevalences = prevalences,
+                             detections = detections,
+                             colours = rev(brewer.pal(5, "Spectral")),
+                             min.prevalence = .9)
+
+## Data used for plotting 
+Out.No.Raindf <- Out.No.Raincore$data 
+## list of OTUs
+Out.No.Rainlist <- Out.No.Raindf$Taxa 
+## check the OTU ids
+print(Out.No.Rainlist) 
+## Taxonomy data
+Out.No.Raintax <- tax_table(Out.No.Rain_rare.1)
+Out.No.Raintax <- as.data.frame(Out.No.Raintax)
+## Add the OTus to last column
+Out.No.Raintax$OTU <- rownames(Out.No.Raintax)
+## select taxonomy of only 
+## those OTUs that are used in the plot
+Out.No.Raintax2 <- dplyr::filter(Out.No.Raintax, rownames(Out.No.Raintax) %in% Out.No.Rainlist) 
+
+## Merge all the column into one except the Domain as all is bacteria in this case
+Out.No.Raintax.unit <- tidyr::unite(Out.No.Raintax2, Taxa_level,c("Family", "Genus","OTU"), sep = "_;", remove = TRUE)
+
+Out.No.Raintax.unit$Taxa_level <- gsub(pattern="[a-z]__",replacement="", Out.No.Raintax.unit$Taxa_level)
+## add this new information into the plot data df
+Out.No.Raindf$Taxa <- Out.No.Raintax.unit$Taxa_level
+## Taxonomic information
+knitr::kable(head(Out.No.Raindf))
+## replace the data in the plot object
+Out.No.Raincore$data <- Out.No.Raindf
+## Detection Threshold is the Relative Abundance in %
+plot(Out.No.Raincore + theme(axis.text.x=element_text(size=12,angle=0,hjust =1),
+                             axis.text.y = element_text(size = 12,face="italic"),
+                             strip.text.x = element_text(size=14,colour = "black", face = "bold"), 
+                             strip.text.y = element_text(size=18, face = 'bold'),
+                             plot.title = element_text(size = rel(2)),
+                             axis.title=element_text(size=18,face="bold", vjust = 10),
+                             plot.background = element_blank(),
+                             panel.grid.major = element_blank(),
+                             panel.grid.minor = element_blank()) +
+                      ggtitle("Core Tomatoes outside but not exposed to Rain")+
+                      xlab("Detection threshold (Relative abundance %) "))
+
+
+######### Tomato Plants grown outside: 7 exposed to rain and 3 covered from rain
+RSF_rare_OUT <- subset_samples(run_RSF_rarefied, Time == "Outside") 
+RSF_rare_Outside <- prune_taxa(taxa_sums(RSF_rare_OUT) > 0, RSF_rare_OUT)
+summary(sample_data(RSF_rare_Outside)$System)
+print(RSF_rare_Outside)
+sample_sums(RSF_rare_Outside)
+## RESULTS: 
+###### 10 samples
+###### 3249 taxa
+###### Samples were rarefied to 2546 reads per sample
+
+## keep only taxa with positive sums
+RSF_rare_Outside.1 <- prune_taxa(taxa_sums(RSF_rare_Outside) > 0, RSF_rare_Outside)
+## Relative abundances
+RSF_rare_Outside.rel <- microbiome::transform(RSF_rare_Outside.1, "compositional")
+## Relative population frequencies; at 1% compositional abundance threshold:
+head(prevalence(RSF_rare_Outside.rel, detection = 1, sort = TRUE))
+## Phyloseq object of the core microbiota:
+RSF_rare_Outside.core <- core(RSF_rare_Outside.rel, detection = 0, prevalence = .5)
+
+## Retrieving the associated taxa names from the phyloseq object:
+RSF_rare_Outside_core.taxa <- taxa(RSF_rare_Outside.core)
+class(RSF_rare_Outside_core.taxa)
+## get the taxonomy data
+RSF_rare_Outsidetax.mat <- tax_table(RSF_rare_Outside.core)
+RSF_rare_Outsidetax.df <- as.data.frame(RSF_rare_Outsidetax.mat)
+## add the OTus to last column
+RSF_rare_Outsidetax.df$OTU <- rownames(RSF_rare_Outsidetax.df)
+
+## select taxonomy of only 
+## those OTUs that are core members based on the thresholds that were used.
+RSF_rare_Outside_core.taxa.class <- dplyr::filter(RSF_rare_Outsidetax.df, rownames(RSF_rare_Outsidetax.df) %in% RSF_rare_Outside_core.taxa)
+knitr::kable(head(RSF_rare_Outside_core.taxa.class))
+
+######### Core heatmaps
+## Set different detection levels and prevalence
+prevalences <- seq(.5, 1, .5) #0.5 = 95% prevalence
+detections <- 10^seq(log10(1e-3), log10(max(abundances(RSF_rare_Outside.1))/10), length = 10)
+
+RSF_rare_Outsidecore <- plot_core(RSF_rare_Outside.1, plot.type = "heatmap", 
+                                  prevalences = prevalences,
+                                  detections = detections,
+                                  colours = rev(brewer.pal(5, "Spectral")),
+                                  min.prevalence = .7)
+
+## Data used for plotting 
+RSF_rare_Outsidedf <- RSF_rare_Outsidecore$data 
+## list of OTUs
+RSF_rare_Outsidelist <- RSF_rare_Outsidedf$Taxa 
+## check the OTU ids
+print(RSF_rare_Outsidelist) 
+## Taxonomy data
+RSF_rare_Outsidetax <- tax_table(RSF_rare_Outside.1)
+RSF_rare_Outsidetax <- as.data.frame(RSF_rare_Outsidetax)
+## Add the OTus to last column
+RSF_rare_Outsidetax$OTU <- rownames(RSF_rare_Outsidetax)
+## select taxonomy of only 
+## those OTUs that are used in the plot
+RSF_rare_Outsidetax2 <- dplyr::filter(RSF_rare_Outsidetax, rownames(RSF_rare_Outsidetax) %in% RSF_rare_Outsidelist) 
+
+## Merge all the column into one except the Domain as all is bacteria in this case
+RSF_rare_Outsidetax.unit <- tidyr::unite(RSF_rare_Outsidetax2, Taxa_level,c("Family", "Genus","OTU"), sep = "_;", remove = TRUE)
+######## RESULT: 2 OTUs in the Core hydroponic microbiome
+
+RSF_rare_Outsidetax.unit$Taxa_level <- gsub(pattern="[a-z]__",replacement="", RSF_rare_Outsidetax.unit$Taxa_level)
+
+## add this new information into the plot data df
+RSF_rare_Outsidedf$Taxa <- RSF_rare_Outsidetax.unit$Taxa_level
+## Taxonomic information
+knitr::kable(head(RSF_rare_Outsidedf))
+## replace the data in the plot object
+RSF_rare_Outsidecore$data <- RSF_rare_Outsidedf
+## Detection Threshold is the Relative Abundance in %
+plot(RSF_rare_Outsidecore + theme(axis.text.x=element_text(size=12,angle=0,hjust =1),
+                                  axis.text.y = element_text(size = 12,face="italic"),
+                                  strip.text.x = element_text(size=14,colour = "black", face = "bold"), 
+                                  strip.text.y = element_text(size=18, face = 'bold'),
+                                  plot.title = element_text(size = rel(2)),
+                                  axis.title=element_text(size=18,face="bold", vjust = 10),
+                                  plot.background = element_blank(),
+                                  panel.grid.major = element_blank(),
+                                  panel.grid.minor = element_blank()) +
+                            ggtitle("Core Tomatoes grown outside")+
+                            xlab("Detection threshold (Relative abundance %) "))
+
 
 ######################### DIFERENTIAL ABUNDANCE ##########################################
 ######### Hydroponic vs Organic
@@ -1883,7 +2040,7 @@ ggplot(sigtabgen_H_OutR, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
 
 
 ######### Organics vs tomatoes exposed to rain
-run_RSF_ORG_RAIN <- subset_samples(run, System%in%c("Organic","Out.Rain"))
+run_RSF_ORG_RAIN <- subset_samples(run_RSF_rarefied, System%in%c("Organic","Out.Rain"))
 run_RSF_O_R <- prune_taxa(taxa_sums(run_RSF_ORG_RAIN) > 0, run_RSF_ORG_RAIN)
 summary(sample_data(run_RSF_O_R)$System)
 print(run_RSF_O_R)
@@ -1910,13 +2067,13 @@ sigtab_O_OutR = res_O_OutR[(res_O_OutR$padj < alpha), ]
 sigtab_O_OutR = cbind(as(sigtab_O_OutR, "data.frame"), as(tax_table(run_RSF_O_R)[rownames(sigtab_O_OutR), ], "matrix"))
 head(sigtab_O_OutR)
 ##### To write all OTUs that were significant different: positives and negatives
-sigtab_O_OutR = sigtab_O_OutR[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
-write.csv(sigtab_O_OutR, 'DEseq_all_values_Org_vs_OutRain.csv')
+sigtab_O_OutR = sigtab_O_OutR[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus", "Species")]
+write.csv(sigtab_O_OutR, 'DEseq_all_values1_Org_vs_OutRain.csv')
 ###### RESULT: 159 TAXA differentially abundant ##############
 ##### To subset positives values
 posigtab_O_OutR = sigtab_O_OutR[sigtab_O_OutR[, "log2FoldChange"] > 0, ]
-posigtab_O_OutR = posigtab_O_OutR[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
-write.csv(posigtab_O_OutR, 'Differential_abundance_Organics vs_tomato_outsideRain.csv')
+posigtab_O_OutR = posigtab_O_OutR[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus", "Species")]
+write.csv(posigtab_O_OutR, 'Differential_abundance1_Organics vs_tomato_outsideRain.csv')
 ###### RESULT: 58 TAXA differentially abundant ##############
 
 theme_set(theme_bw())
@@ -2133,7 +2290,7 @@ ggplot(sigtabgen_H_Out, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
 
 
 ######### Organics vs tomatoes outside
-run_RSF_Org_Outside <- subset_samples(run, Source%in%c("Organic","Outside"))
+run_RSF_Org_Outside <- subset_samples(run_RSF, Source%in%c("Organic","Outside"))
 run_RSF_O_Out <- prune_taxa(taxa_sums(run_RSF_Org_Outside) > 0, run_RSF_Org_Outside)
 summary(sample_data(run_RSF_O_Out)$System)
 print(run_RSF_O_Out)
@@ -2193,66 +2350,3 @@ ggplot(sigtabgen_O_Out, aes(y=Genus, x=log2FoldChange, color=Phylum)) +
   ylab("Genus \n") +
   xlab("Log2FoldChange") +
   ggtitle("DEseq Organic vs Outside")
-
-
-######### Organics vs tomatoes outside
-run_RSF_OutRain <- subset_samples(run, System%in%c("Organic","Out.Rain","Hydroponic"))
-RSF_OutRain <- prune_taxa(taxa_sums(run_RSF_OutRain) > 0, run_RSF_OutRain)
-summary(sample_data(RSF_OutRain)$Treatment)
-print(RSF_OutRain)
-sample_sums(RSF_OutRain)
-## RESULTS: 
-###### 28 samples
-###### 19195 taxa
-
-RSF_OutRain <- prune_samples(sample_sums(RSF_OutRain) > 500, RSF_OutRain)
-head(sample_data(RSF_OutRain)$Treatment, 25)
-
-deseq_RSF_OutR = phyloseq_to_deseq2(RSF_OutRain, ~ Treatment)
-# calculate geometric means prior to estimate size factors
-gm_mean = function(x, na.rm=TRUE){
-  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
-}
-geoMeans = apply(counts(deseq_RSF_OutR), 1, gm_mean)
-deseq_RSF_OutR = estimateSizeFactors(deseq_RSF_OutR, geoMeans = geoMeans)
-deseq_RSF_OutR = DESeq(deseq_RSF_OutR, fitType="local")
-
-res_RSF_OutR = results(deseq_RSF_OutR)
-res_RSF_OutR = res_RSF_OutR[order(res_RSF_OutR$padj, na.last=NA), ]
-alpha = 0.01
-sigtab_RSF_OutR = res_RSF_OutR[(res_RSF_OutR$padj < alpha), ]
-sigtab_RSF_OutR = cbind(as(sigtab_RSF_OutR, "data.frame"), as(tax_table(RSF_OutRain)[rownames(sigtab_RSF_OutR), ], "matrix"))
-head(sigtab_RSF_OutR)
-##### To write all OTUs that were significant different: positives and negatives
-sigtab_RSF_OutR = sigtab_RSF_OutR[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
-write.csv(sigtab_RSF_OutR, 'DEseq_all_values_Greenhouse_vs_OutRain.csv')
-###### RESULT: 255 TAXA differentially abundant ##############
-##### To subset positives values
-posigtab_RSF_OutR = sigtab_RSF_OutR[sigtab_RSF_OutR[, "log2FoldChange"] > 0, ]
-posigtab_RSF_OutR = posigtab_RSF_OutR[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
-write.csv(posigtab_RSF_OutR, 'Differential_abundance_Greenhouse vs outRain.csv')
-###### RESULT: 129 TAXA differentially abundant ##############
-
-theme_set(theme_bw())
-sigtabgen_RSF_OutR = subset(sigtab_RSF_OutR, !is.na(Genus))
-# Phylum order
-x = tapply(sigtabgen_RSF_OutR$log2FoldChange, sigtabgen_RSF_OutR$Phylum, function(x) max(x))
-x = sort(x, TRUE)
-sigtabgen_RSF_OutR$Phylum = factor(as.character(sigtabgen_RSF_OutR$Phylum), levels=names(x))
-# Genus order
-x = tapply(sigtabgen_RSF_OutR$log2FoldChange, sigtabgen_RSF_OutR$Genus, function(x) max(x))
-x = sort(x, TRUE)
-sigtabgen_RSF_OutR$Genus = factor(as.character(sigtabgen_RSF_OutR$Genus), levels=names(x))
-ggplot(sigtabgen_RSF_OutR, aes(y=Genus, x=log2FoldChange, color=Phylum)) + 
-  geom_vline(xintercept = 0.0, color = "gray", size = 0.5) +
-  geom_point(size=4) + 
-  theme(axis.text.x=element_text(size=14,angle=90,hjust =1,  vjust=0.5),
-        axis.text.y = element_text(size = 11),
-        strip.text.x = element_text(size=16,colour = "black", face = "bold"), 
-        strip.text.y = element_text(size=16, face = 'bold'),
-        plot.title = element_text(size = rel(2)),
-        axis.title=element_text(size=14,face="bold", vjust = 10),
-        legend.text = element_text(size=12)) +
-  ylab("Genus \n") +
-  xlab("Log2FoldChange") +
-  ggtitle("DEseq Outside_Rain vs Greenhouse")
